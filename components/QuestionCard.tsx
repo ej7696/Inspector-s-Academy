@@ -9,15 +9,16 @@ interface QuestionCardProps {
   onNext: () => void;
 }
 
+// Icon components for visual feedback
 const CheckIcon = () => (
-  <svg className="w-6 h-6 text-green-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-500 ml-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
   </svg>
 );
 
 const CrossIcon = () => (
-  <svg className="w-6 h-6 text-red-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-500 ml-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
   </svg>
 );
 
@@ -31,10 +32,12 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
 }) => {
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isExplanationExpanded, setIsExplanationExpanded] = useState(false);
 
   useEffect(() => {
     setSelectedAnswer(null);
     setIsSubmitted(false);
+    setIsExplanationExpanded(false);
   }, [question]);
 
   const handleSelectAnswer = (option: string) => {
@@ -58,17 +61,26 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
 
   const getOptionClass = (option: string) => {
     if (!isSubmitted) {
-      return selectedAnswer === option
-        ? 'bg-indigo-100 border-indigo-500'
-        : 'bg-white border-gray-300 hover:bg-gray-50';
+      if (selectedAnswer === option) {
+        // Selected by user, before submitting
+        return 'bg-indigo-100 border-indigo-500 ring-2 ring-indigo-200';
+      }
+      // Not selected, available to be chosen
+      return 'bg-white hover:bg-indigo-50 border-gray-300';
     }
+  
+    // After submission
     if (option === question.answer) {
-      return 'bg-green-100 border-green-500 text-green-800 font-semibold';
+      // The correct answer
+      return 'bg-green-100 text-green-800 font-semibold border-green-500';
     }
     if (option === selectedAnswer && option !== question.answer) {
-      return 'bg-red-100 border-red-500 text-red-800';
+      // The user's incorrect answer
+      return 'bg-red-100 text-red-800 border-red-500';
     }
-    return 'bg-gray-100 border-gray-300 text-gray-500';
+    
+    // Other options that were not correct and not chosen by user
+    return 'bg-gray-50 text-gray-500 border-gray-300';
   };
 
 
@@ -78,15 +90,17 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
         Question {questionNumber} of {totalQuestions}
       </p>
       <h2 className="text-2xl font-bold text-gray-800 mb-6" dangerouslySetInnerHTML={{ __html: question.question }} />
-      <div className="space-y-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {question.options.map((option, index) => (
           <button
             key={index}
             onClick={() => handleSelectAnswer(option)}
             disabled={isSubmitted}
-            className={`w-full text-left p-4 rounded-lg border-2 transition-colors disabled:cursor-not-allowed ${getOptionClass(option)}`}
+            className={`w-full text-left p-3 rounded-md transition-colors disabled:cursor-not-allowed border flex justify-between items-center ${getOptionClass(option)}`}
           >
-            {option}
+            <span>{option}</span>
+            {isSubmitted && option === question.answer && <CheckIcon />}
+            {isSubmitted && selectedAnswer === option && !isCorrect && <CrossIcon />}
           </button>
         ))}
       </div>
@@ -116,9 +130,8 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
             </div>
             <div>
               <p className="font-semibold text-gray-600 mb-2">Inspector's Academy said:</p>
-              <div className={`flex items-center p-3 rounded-lg ${isCorrect ? 'bg-green-50' : 'bg-red-50'}`}>
-                {isCorrect ? <CheckIcon/> : <CrossIcon/>}
-                <p className={`ml-3 font-bold ${isCorrect ? 'text-green-800' : 'text-red-800'}`}>
+              <div className={`p-3 rounded-lg ${isCorrect ? 'bg-green-50' : 'bg-red-50'}`}>
+                <p className={`font-bold ${isCorrect ? 'text-green-800' : 'text-red-800'}`}>
                   {isCorrect ? 'Correct!' : `Not quite — the correct answer is ${question.answer}`}
                 </p>
               </div>
@@ -131,8 +144,30 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
             </div>
 
             <div>
-              <p className="font-semibold text-gray-600">Quick Explanation:</p>
-              <p className="mt-1">{question.explanation}</p>
+              <button
+                onClick={() => setIsExplanationExpanded(!isExplanationExpanded)}
+                className="w-full flex justify-between items-center text-left py-2 px-1 rounded hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                aria-expanded={isExplanationExpanded}
+                aria-controls="explanation-content"
+              >
+                <span className="font-semibold text-gray-600">Quick Explanation:</span>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className={`h-5 w-5 text-gray-500 transition-transform duration-200 ${
+                    isExplanationExpanded ? 'transform rotate-180' : ''
+                  }`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {isExplanationExpanded && (
+                <div id="explanation-content" className="mt-2 pl-3 text-gray-700">
+                  <p>{question.explanation}</p>
+                </div>
+              )}
             </div>
           </div>
         )}

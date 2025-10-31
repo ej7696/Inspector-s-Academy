@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 
 interface HomePageProps {
   onStartQuiz: (topic: string, numQuestions: number) => void;
@@ -6,27 +6,55 @@ interface HomePageProps {
   error: string | null;
 }
 
-const exams = [
-  "API 510 – Pressure Vessels 🔧",
-  "API 570 – Piping Systems 🔩",
-  "API 653 – Tanks 🛢",
-  "API 580 – RBI 📊",
-  "API 571 – Damage Mechanisms 🧪",
-  "API 1169 – Pipelines 🛠",
-  "SIFE – Fixed Equipment ⚙️",
-  "SIRE – Rotating Equipment 🔄",
-  "SIEE – Electrical Equipment ⚡"
-];
+// Restructure exams into categories
+// Fix: Add a string index signature to allow iterating over keys with type safety.
+const categorizedExams: { [key: string]: string[] } = {
+  "API Certifications": [
+    "API 510 – Pressure Vessels 🔧",
+    "API 570 – Piping Systems 🔩",
+    "API 653 – Tanks 🛢",
+    "API 580 – RBI 📊",
+    "API 571 – Damage Mechanisms 🧪",
+    "API 1169 – Pipelines 🛠",
+  ],
+  "SIFE/SIRE/SIEE Certifications": [
+    "SIFE – Fixed Equipment ⚙️",
+    "SIRE – Rotating Equipment 🔄",
+    "SIEE – Electrical Equipment ⚡"
+  ]
+};
 
 
 const HomePage: React.FC<HomePageProps> = ({ onStartQuiz, loading, error }) => {
-  const [selectedExam, setSelectedExam] = useState(exams[2]);
+  const [selectedExam, setSelectedExam] = useState(categorizedExams["API Certifications"][2]);
   const [numQuestions, setNumQuestions] = useState(5);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onStartQuiz(selectedExam, numQuestions);
   };
+
+  const filteredExams = useMemo(() => {
+    if (!searchTerm.trim()) {
+      return categorizedExams;
+    }
+
+    const lowercasedFilter = searchTerm.toLowerCase();
+    const result: { [key: string]: string[] } = {};
+
+    for (const category in categorizedExams) {
+      // Fix: Remove `as any` type assertion to maintain type safety.
+      const examsInCategory = categorizedExams[category];
+      const filtered = examsInCategory.filter((exam: string) =>
+        exam.toLowerCase().includes(lowercasedFilter)
+      );
+      if (filtered.length > 0) {
+        result[category] = filtered;
+      }
+    }
+    return result;
+  }, [searchTerm]);
 
   return (
     <div className="text-center">
@@ -35,6 +63,20 @@ const HomePage: React.FC<HomePageProps> = ({ onStartQuiz, loading, error }) => {
         Before I generate the exam, please confirm a few setup details. Select an exam and the number of questions to generate your personalized mock test.
       </p>
       <form onSubmit={handleSubmit} className="space-y-6">
+        <div>
+          <label htmlFor="exam-search" className="block text-sm font-medium text-gray-700 mb-2">
+            Search for an Exam
+          </label>
+          <input
+            id="exam-search"
+            type="text"
+            placeholder="e.g., API 653, Piping, etc."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+          />
+        </div>
+
         <div>
           <label htmlFor="exam" className="block text-sm font-medium text-gray-700 mb-2">
             Select Exam
@@ -46,11 +88,19 @@ const HomePage: React.FC<HomePageProps> = ({ onStartQuiz, loading, error }) => {
             className="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 bg-white"
             required
           >
-            {exams.map((exam) => (
-              <option key={exam} value={exam}>
-                {exam}
-              </option>
-            ))}
+            {Object.keys(filteredExams).length > 0 ? (
+                Object.entries(filteredExams).map(([category, exams]) => (
+                    <optgroup key={category} label={category}>
+                        {exams.map((exam) => (
+                        <option key={exam} value={exam}>
+                            {exam}
+                        </option>
+                        ))}
+                    </optgroup>
+                ))
+            ) : (
+                <option disabled>No exams found</option>
+            )}
           </select>
         </div>
         <div>
