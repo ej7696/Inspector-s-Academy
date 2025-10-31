@@ -102,13 +102,29 @@ function App() {
           />
         )}
         {gameState === 'quiz' && questions.length > 0 && (
-          <QuestionCard
-            question={questions[currentQuestionIndex]}
-            questionNumber={currentQuestionIndex + 1}
-            totalQuestions={questions.length}
-            onAnswer={handleAnswer}
-            onNext={handleNextQuestion}
-          />
+          <>
+            <div className="mb-6">
+                <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-semibold text-indigo-700">Progress</span>
+                    <span className="text-sm font-semibold text-gray-600">
+                        {currentQuestionIndex + 1} / {questions.length}
+                    </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                    <div
+                        className="bg-indigo-600 h-2.5 rounded-full transition-all duration-500"
+                        style={{ width: `${((currentQuestionIndex + 1) / questions.length) * 100}%` }}
+                    ></div>
+                </div>
+            </div>
+            <QuestionCard
+              question={questions[currentQuestionIndex]}
+              questionNumber={currentQuestionIndex + 1}
+              totalQuestions={questions.length}
+              onAnswer={handleAnswer}
+              onNext={handleNextQuestion}
+            />
+          </>
         )}
         {gameState === 'complete' && (
           <QuizCompleteScreen onRestart={restartQuiz} />

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 
 interface HomePageProps {
   onStartQuiz: (topic: string, numQuestions: number) => void;
@@ -7,7 +7,6 @@ interface HomePageProps {
 }
 
 // Restructure exams into categories
-// Fix: Add a string index signature to allow iterating over keys with type safety.
 const categorizedExams: { [key: string]: string[] } = {
   "API Certifications": [
     "API 510 – Pressure Vessels 🔧",
@@ -24,37 +23,14 @@ const categorizedExams: { [key: string]: string[] } = {
   ]
 };
 
-
 const HomePage: React.FC<HomePageProps> = ({ onStartQuiz, loading, error }) => {
   const [selectedExam, setSelectedExam] = useState(categorizedExams["API Certifications"][2]);
   const [numQuestions, setNumQuestions] = useState(5);
-  const [searchTerm, setSearchTerm] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onStartQuiz(selectedExam, numQuestions);
   };
-
-  const filteredExams = useMemo(() => {
-    if (!searchTerm.trim()) {
-      return categorizedExams;
-    }
-
-    const lowercasedFilter = searchTerm.toLowerCase();
-    const result: { [key: string]: string[] } = {};
-
-    for (const category in categorizedExams) {
-      // Fix: Remove `as any` type assertion to maintain type safety.
-      const examsInCategory = categorizedExams[category];
-      const filtered = examsInCategory.filter((exam: string) =>
-        exam.toLowerCase().includes(lowercasedFilter)
-      );
-      if (filtered.length > 0) {
-        result[category] = filtered;
-      }
-    }
-    return result;
-  }, [searchTerm]);
 
   return (
     <div className="text-center">
@@ -63,47 +39,39 @@ const HomePage: React.FC<HomePageProps> = ({ onStartQuiz, loading, error }) => {
         Before I generate the exam, please confirm a few setup details. Select an exam and the number of questions to generate your personalized mock test.
       </p>
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <label htmlFor="exam-search" className="block text-sm font-medium text-gray-700 mb-2">
-            Search for an Exam
-          </label>
-          <input
-            id="exam-search"
-            type="text"
-            placeholder="e.g., API 653, Piping, etc."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="exam" className="block text-sm font-medium text-gray-700 mb-2">
+        <div className="text-left">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
             Select Exam
           </label>
-          <select
-            id="exam"
-            value={selectedExam}
-            onChange={(e) => setSelectedExam(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 bg-white"
-            required
-          >
-            {Object.keys(filteredExams).length > 0 ? (
-                Object.entries(filteredExams).map(([category, exams]) => (
-                    <optgroup key={category} label={category}>
-                        {exams.map((exam) => (
-                        <option key={exam} value={exam}>
-                            {exam}
-                        </option>
-                        ))}
-                    </optgroup>
-                ))
-            ) : (
-                <option disabled>No exams found</option>
-            )}
-          </select>
+          <div className="space-y-5">
+            {Object.keys(categorizedExams).map((category) => (
+              <div key={category}>
+                <h3 className="text-md font-semibold text-gray-600 mb-3 border-b pb-2">{category}</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {categorizedExams[category].map((exam) => {
+                    const isSelected = selectedExam === exam;
+                    return (
+                      <button
+                        type="button"
+                        key={exam}
+                        onClick={() => setSelectedExam(exam)}
+                        className={`w-full text-left p-3 rounded-md transition-all duration-200 border text-sm ${
+                          isSelected
+                            ? 'bg-indigo-100 border-indigo-500 ring-2 ring-indigo-200 font-semibold text-indigo-800'
+                            : 'bg-white hover:bg-indigo-50 hover:border-indigo-400 border-gray-300'
+                        }`}
+                      >
+                        {exam}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-        <div>
+        
+        <div className="text-left">
           <label htmlFor="numQuestions" className="block text-sm font-medium text-gray-700 mb-2">
             Number of Questions
           </label>
