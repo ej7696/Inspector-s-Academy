@@ -4,9 +4,10 @@ import { UserAnswer } from '../types';
 interface ScoreScreenProps {
   userAnswers: UserAnswer[];
   onRestart: () => void;
+  isPro: boolean;
+  onNavigateToDashboard: () => void;
 }
 
-// Icon components for visual feedback in the review
 const CheckIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-500 inline-block mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -20,7 +21,7 @@ const CrossIcon = () => (
 );
 
 
-const ScoreScreen: React.FC<ScoreScreenProps> = ({ userAnswers, onRestart }) => {
+const ScoreScreen: React.FC<ScoreScreenProps> = ({ userAnswers, onRestart, isPro, onNavigateToDashboard }) => {
   const score = userAnswers.filter(ua => ua.userAnswer === ua.answer).length;
   const totalQuestions = userAnswers.length;
   const percentage = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
@@ -72,13 +73,21 @@ const ScoreScreen: React.FC<ScoreScreenProps> = ({ userAnswers, onRestart }) => 
           </div>
       </div>
       
-      <div className="text-center mt-10">
+      <div className="text-center mt-10 flex flex-col sm:flex-row justify-center gap-4">
         <button
           onClick={onRestart}
           className="py-3 px-8 bg-indigo-600 text-white font-semibold rounded-md shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
         >
           Take Another Exam
         </button>
+        {isPro && (
+            <button
+                onClick={onNavigateToDashboard}
+                className="py-3 px-8 bg-white border border-indigo-600 text-indigo-600 font-semibold rounded-md shadow-sm hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+                View Dashboard
+            </button>
+        )}
       </div>
     </div>
   );

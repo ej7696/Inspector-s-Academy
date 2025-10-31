@@ -7,9 +7,10 @@ interface QuestionCardProps {
   totalQuestions: number;
   onAnswer: (answer: string) => void;
   onNext: () => void;
+  isPro: boolean;
+  onAskFollowUp: (context: { question: string, explanation: string }, followUpQuestion: string) => Promise<string>;
 }
 
-// Icon components for visual feedback
 const CheckIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-500 ml-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -22,6 +23,52 @@ const CrossIcon = () => (
   </svg>
 );
 
+const FollowUpSection: React.FC<{
+    question: Question;
+    onAskFollowUp: (context: { question: string, explanation: string }, followUpQuestion: string) => Promise<string>;
+}> = ({ question, onAskFollowUp }) => {
+    const [followUpQuery, setFollowUpQuery] = useState('');
+    const [followUpAnswer, setFollowUpAnswer] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+
+    const handleFollowUpSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!followUpQuery) return;
+        setIsLoading(true);
+        setFollowUpAnswer('');
+        const answer = await onAskFollowUp({ question: question.question, explanation: question.explanation }, followUpQuery);
+        setFollowUpAnswer(answer);
+        setIsLoading(false);
+    };
+
+    return (
+        <div className="mt-4 p-4 bg-indigo-50 rounded-lg">
+            <p className="font-semibold text-indigo-800 mb-2">Ask a follow-up question:</p>
+            <form onSubmit={handleFollowUpSubmit}>
+                <textarea
+                    value={followUpQuery}
+                    onChange={(e) => setFollowUpQuery(e.target.value)}
+                    placeholder="e.g., What does 'brittle fracture' mean?"
+                    className="w-full p-2 border border-indigo-200 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                    rows={2}
+                />
+                <button
+                    type="submit"
+                    disabled={isLoading || !followUpQuery}
+                    className="mt-2 py-1 px-4 bg-indigo-600 text-white font-semibold rounded-md shadow-sm hover:bg-indigo-700 disabled:bg-gray-400"
+                >
+                    {isLoading ? 'Thinking...' : 'Ask'}
+                </button>
+            </form>
+            {followUpAnswer && (
+                <div className="mt-4 p-3 bg-white rounded-md border border-indigo-200">
+                    <p className="text-gray-700">{followUpAnswer}</p>
+                </div>
+            )}
+        </div>
+    );
+};
+
 
 const QuestionCard: React.FC<QuestionCardProps> = ({
   question,
@@ -29,6 +76,8 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
   totalQuestions,
   onAnswer,
   onNext,
+  isPro,
+  onAskFollowUp
 }) => {
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -61,28 +110,13 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
 
   const getOptionClass = (option: string) => {
     if (!isSubmitted) {
-      if (selectedAnswer === option) {
-        // Selected by user, before submitting
-        return 'bg-indigo-100 border-indigo-500 ring-2 ring-indigo-200';
-      }
-      // Not selected, available to be chosen
+      if (selectedAnswer === option) return 'bg-indigo-100 border-indigo-500 ring-2 ring-indigo-200';
       return 'bg-white hover:bg-indigo-50 border-gray-300';
     }
-  
-    // After submission
-    if (option === question.answer) {
-      // The correct answer
-      return 'bg-green-100 text-green-800 font-semibold border-green-500';
-    }
-    if (option === selectedAnswer && option !== question.answer) {
-      // The user's incorrect answer
-      return 'bg-red-100 text-red-800 border-red-500';
-    }
-    
-    // Other options that were not correct and not chosen by user
+    if (option === question.answer) return 'bg-green-100 text-green-800 font-semibold border-green-500';
+    if (option === selectedAnswer && option !== question.answer) return 'bg-red-100 text-red-800 border-red-500';
     return 'bg-gray-50 text-gray-500 border-gray-300';
   };
-
 
   return (
     <div>
@@ -166,6 +200,7 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
               {isExplanationExpanded && (
                 <div id="explanation-content" className="mt-2 pl-3 text-gray-700">
                   <p>{question.explanation}</p>
+                  {isPro && <FollowUpSection question={question} onAskFollowUp={onAskFollowUp} />}
                 </div>
               )}
             </div>
