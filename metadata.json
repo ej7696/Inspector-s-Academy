@@ -1,0 +1,5 @@
+{
+  "name": "API & SIFE Certification Practice Exams",
+  "description": "An interactive web application to help users practice for various API and SIFE/SIRE/SIEE certification exams, featuring AI-generated mock exams.",
+  "requestFramePermissions": []
+}
