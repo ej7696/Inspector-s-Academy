@@ -30,9 +30,9 @@ const HomePage: React.FC<HomePageProps> = ({ onStartQuiz, loading, error }) => {
 
   return (
     <div className="text-center">
-      <h1 className="text-4xl font-bold text-gray-800 mb-4">API & SIFE Certification Practice Exams</h1>
+      <h1 className="text-4xl font-bold text-gray-800 mb-4">Creating Your Interactive Mock Exam</h1>
       <p className="text-lg text-gray-600 mb-8">
-        Select an exam and the number of questions to generate a personalized mock test.
+        Before I generate the exam, please confirm a few setup details. Select an exam and the number of questions to generate your personalized mock test.
       </p>
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
@@ -73,7 +73,7 @@ const HomePage: React.FC<HomePageProps> = ({ onStartQuiz, loading, error }) => {
           disabled={loading}
           className="w-full py-3 px-4 bg-indigo-600 text-white font-semibold rounded-md shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400"
         >
-          {loading ? 'Generating...' : 'Start Mock Exam'}
+          {loading ? 'Generating...' : 'Generate Exam'}
         </button>
       </form>
       {error && <p className="text-red-500 mt-4">{error}</p>}

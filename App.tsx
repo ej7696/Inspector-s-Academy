@@ -1,13 +1,12 @@
 import React, { useState, useCallback } from 'react';
 import HomePage from './components/HomePage';
 import QuestionCard from './components/QuestionCard';
-import ScoreScreen from './components/ScoreScreen';
+import QuizCompleteScreen from './components/ScoreScreen';
 import Paywall from './components/Paywall';
 import { Question, UserAnswer } from './types';
-// FIX: Import GoogleGenAI and Type from @google/genai
 import { GoogleGenAI, Type } from "@google/genai";
 
-type GameState = 'home' | 'quiz' | 'score' | 'paywall';
+type GameState = 'home' | 'quiz' | 'complete' | 'paywall';
 
 function App() {
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -26,19 +25,14 @@ function App() {
     setLoading(true);
     setError(null);
     try {
-      // FIX: Initialize GoogleGenAI with apiKey from environment variables.
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
-      const prompt = `Generate ${numQuestions} multiple-choice questions about ${topic}. Each question should have 4 options. Format the output as a JSON array, where each object has "question", "options" (an array of 4 strings), "answer" (the correct option string), and "explanation".`;
+      const prompt = `Generate ${numQuestions} multiple-choice questions for the "${topic}" certification exam. The questions should simulate a real exam environment. For each question, provide: a "question" text, an array of 4 "options" (each starting with "A. ", "B. ", "C. ", or "D. "), the correct "answer" string which must be one of the options, a "reference" to the relevant API document section, a direct "quote" from that section that justifies the answer, and a concise "explanation" in simpler terms. Format the output as a JSON array of objects with these keys: "question", "options", "answer", "reference", "quote", "explanation".`;
 
-      // FIX: Use ai.models.generateContent to generate content.
       const response = await ai.models.generateContent({
-        // FIX: Use a recommended model for complex text tasks.
         model: 'gemini-2.5-pro',
         contents: prompt,
         config: {
-          // FIX: Set responseMimeType to application/json for JSON output.
           responseMimeType: "application/json",
-          // FIX: Define a response schema for structured JSON output.
           responseSchema: {
             type: Type.ARRAY,
             items: {
@@ -51,14 +45,15 @@ function App() {
                 },
                 answer: { type: Type.STRING },
                 explanation: { type: Type.STRING },
+                reference: { type: Type.STRING },
+                quote: { type: Type.STRING },
               },
-              required: ["question", "options", "answer", "explanation"],
+              required: ["question", "options", "answer", "explanation", "reference", "quote"],
             },
           },
         },
       });
       
-      // FIX: Extract text from response correctly using response.text and parse it.
       const jsonText = response.text.trim();
       const generatedQuestions = JSON.parse(jsonText);
       setQuestions(generatedQuestions);
@@ -87,7 +82,7 @@ function App() {
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
     } else {
-      setGameState('score');
+      setGameState('complete');
     }
   };
 
@@ -97,8 +92,8 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 font-sans flex items-center justify-center">
-      <main className="container mx-auto p-4 max-w-2xl bg-white rounded-xl shadow-lg">
+    <div className="min-h-screen bg-gray-100 font-sans flex items-center justify-center py-8">
+      <main className="container mx-auto p-6 max-w-3xl bg-white rounded-xl shadow-lg">
         {gameState === 'home' && (
           <HomePage
             onStartQuiz={startQuiz}
@@ -115,8 +110,8 @@ function App() {
             onNext={handleNextQuestion}
           />
         )}
-        {gameState === 'score' && (
-          <ScoreScreen userAnswers={userAnswers} onRestart={restartQuiz} />
+        {gameState === 'complete' && (
+          <QuizCompleteScreen onRestart={restartQuiz} />
         )}
         {gameState === 'paywall' && <Paywall />}
       </main>

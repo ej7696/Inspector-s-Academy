@@ -3,6 +3,8 @@ export interface Question {
   options: string[];
   answer: string;
   explanation: string;
+  reference: string;
+  quote: string;
 }
 
 export interface UserAnswer extends Question {
