@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import HomePage from './components/HomePage';
 import QuestionCard from './components/QuestionCard';
-import QuizCompleteScreen from './components/ScoreScreen';
+import ScoreScreen from './components/ScoreScreen';
 import Paywall from './components/Paywall';
 import { Question, UserAnswer } from './types';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -127,7 +127,7 @@ function App() {
           </>
         )}
         {gameState === 'complete' && (
-          <QuizCompleteScreen onRestart={restartQuiz} />
+          <ScoreScreen userAnswers={userAnswers} onRestart={restartQuiz} />
         )}
         {gameState === 'paywall' && <Paywall />}
       </main>
