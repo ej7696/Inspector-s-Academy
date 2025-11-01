@@ -31,12 +31,14 @@ export interface Question {
 }
 
 export type UserRole = 'USER' | 'SUB_ADMIN' | 'ADMIN';
+export type SubscriptionTier = 'Cadet' | 'Professional' | 'Specialist';
 
 export interface User {
   id: number;
   email: string;
   password?: string;
   role: UserRole;
-  isPro: boolean;
+  subscriptionTier: SubscriptionTier;
+  unlockedExams: string[];
   history: QuizResult[];
 }

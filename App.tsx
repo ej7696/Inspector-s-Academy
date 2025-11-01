@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI, Type } from "@google/genai";
 import HomePage from './components/HomePage';
 import QuestionCard from './components/QuestionCard';
@@ -9,7 +9,7 @@ import Paywall from './components/Paywall';
 import AdminDashboard from './components/AdminDashboard';
 import ProgressBar from './components/ProgressBar';
 import ExamModeSelector from './components/ExamModeSelector';
-import { Question, QuizResult, User, UserAnswer } from './types';
+import { Question, QuizResult, User, UserAnswer, SubscriptionTier } from './types';
 import { examSourceData } from './services/examData';
 import { getCurrentUser, logout as authLogout, updateCurrentUser } from './services/authService';
 import { updateUser } from './services/userData';
@@ -26,10 +26,12 @@ const App: React.FC = () => {
     const [error, setError] = useState('');
     const [quizSettings, setQuizSettings] = useState<{ examName: string, numQuestions: number, isTimed: boolean, topics?: string } | null>(null);
     
-    // State for Simulation Mode
     const [simulationPhase, setSimulationPhase] = useState<'closed_book' | 'open_book' | null>(null);
     const [closedBookResults, setClosedBookResults] = useState<{ questions: Question[], userAnswers: (string|null)[] } | null>(null);
-
+    const [timeLeft, setTimeLeft] = useState<number | null>(null);
+    const timerRef = useRef<number | null>(null);
+    const [followUpAnswer, setFollowUpAnswer] = useState<string>('');
+    const [isFollowUpLoading, setIsFollowUpLoading] = useState<boolean>(false);
 
     useEffect(() => {
         const currentUser = getCurrentUser();
@@ -41,16 +43,43 @@ const App: React.FC = () => {
         setLoadingMessage('');
     }, []);
 
+    useEffect(() => {
+      if (timeLeft === null || timerRef.current !== null) return;
+  
+      if (timeLeft > 0) {
+        timerRef.current = window.setInterval(() => {
+          setTimeLeft((prevTime) => (prevTime ? prevTime - 1 : 0));
+        }, 1000);
+      } else if (timeLeft === 0) {
+        handleSubmitQuiz();
+      }
+  
+      return () => {
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
+        }
+      };
+    }, [timeLeft]);
+
+    const stopTimer = () => {
+        if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+        }
+        setTimeLeft(null);
+    };
+
     const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
 
     const generateQuestions = async (mode: 'open' | 'closed', isSimulation: boolean) => {
         if (!quizSettings) return;
-        const { examName, numQuestions, topics } = quizSettings;
+        const { examName, numQuestions, isTimed } = quizSettings;
         
         const questionsToGenerate = isSimulation ? Math.ceil(numQuestions / 2) : numQuestions;
 
         setIsLoading(true);
-        setLoadingMessage(`Generating ${questionsToGenerate} ${mode}-book questions for ${topics ? topics : examName}... This may take a moment.`);
+        setLoadingMessage(`Generating ${questionsToGenerate} ${mode}-book questions for ${quizSettings.topics ? quizSettings.topics : examName}... This may take a moment.`);
         setError('');
 
         const examData = examSourceData[examName];
@@ -67,7 +96,7 @@ const App: React.FC = () => {
         const prompt = `
             You are an expert curriculum developer specializing in creating certification exam questions.
             Based on the provided 'Effectivity Sheet' and 'Body of Knowledge' for the "${examName}" certification, generate a challenging, multiple-choice quiz with exactly ${questionsToGenerate} questions.
-            ${topics ? `The quiz should focus specifically on these topics: ${topics}.` : ''}
+            ${quizSettings.topics ? `The quiz should focus specifically on these topics: ${quizSettings.topics}.` : ''}
 
             **IMPORTANT STYLE REQUIREMENT:** ${modeSpecificInstructions}
 
@@ -124,6 +153,11 @@ const App: React.FC = () => {
                 throw new Error("API returned an invalid or empty set of questions.");
             }
 
+            if (isTimed) {
+              const timePerQuestion = 90;
+              setTimeLeft(generatedQuestions.length * timePerQuestion);
+            }
+
             setQuestions(generatedQuestions);
             setUserAnswers(new Array(generatedQuestions.length).fill(null));
             setCurrentQuestionIndex(0);
@@ -160,8 +194,28 @@ const App: React.FC = () => {
     };
     
     const initiateQuizFlow = (examName: string, numQuestions: number, isTimed: boolean) => {
-        setQuizSettings({ examName, numQuestions, isTimed });
-        setView('exam_mode_selection');
+        if (!user) return;
+    
+        const hasAccess = user.subscriptionTier !== 'Cadet' && (user.unlockedExams.includes(examName) || user.role === 'ADMIN');
+        const canUnlock = (user.subscriptionTier === 'Professional' && user.unlockedExams.length < 1) || (user.subscriptionTier === 'Specialist' && user.unlockedExams.length < 2);
+    
+        if (hasAccess || user.subscriptionTier === 'Cadet' /* Free users can start */) {
+            setQuizSettings({ examName, numQuestions, isTimed });
+            setView('exam_mode_selection');
+        } else if (canUnlock) {
+            if (window.confirm(`Unlock "${examName}"? This will use one of your available slots for the ${user.subscriptionTier} plan.`)) {
+                const updatedUser = { ...user, unlockedExams: [...user.unlockedExams, examName] };
+                updateUser(updatedUser);
+                updateCurrentUser(updatedUser);
+                setUser(updatedUser);
+                // Immediately start the quiz after unlocking
+                setQuizSettings({ examName, numQuestions, isTimed });
+                setView('exam_mode_selection');
+            }
+        } else {
+             alert("You have reached your exam track limit. Please upgrade your plan to access more certifications.");
+             setView('paywall');
+        }
     };
 
     const handleStartWeaknessQuiz = (topics: string) => {
@@ -177,9 +231,18 @@ const App: React.FC = () => {
     };
     
     const handleNextQuestion = () => {
+        setFollowUpAnswer('');
+
+        // Paywall check for free users
+        if(user?.subscriptionTier === 'Cadet' && currentQuestionIndex >= 4) {
+            setView('paywall');
+            return;
+        }
+
         const isLastQuestion = currentQuestionIndex === questions.length - 1;
         if (isLastQuestion) {
             if (simulationPhase === 'closed_book') {
+                stopTimer();
                 setClosedBookResults({ questions, userAnswers });
                 setView('intermission');
             } else {
@@ -197,6 +260,7 @@ const App: React.FC = () => {
 
     const handleSubmitQuiz = () => {
         if (!user || !quizSettings) return;
+        stopTimer();
 
         let finalQuestions = questions;
         let finalUserAnswers = userAnswers;
@@ -234,14 +298,15 @@ const App: React.FC = () => {
             userAnswers: processedAnswers,
         };
         
-        const updatedUser = { ...user, history: [result, ...user.history] };
-        updateUser(updatedUser); 
-        updateCurrentUser(updatedUser); 
-        setUser(updatedUser);
+        if (user.subscriptionTier !== 'Cadet') {
+            const updatedUser = { ...user, history: [result, ...user.history] };
+            updateUser(updatedUser); 
+            updateCurrentUser(updatedUser); 
+            setUser(updatedUser);
+        }
         setQuizResult(result);
         setView('score');
         
-        // Reset simulation state
         setSimulationPhase(null);
         setClosedBookResults(null);
     };
@@ -252,19 +317,60 @@ const App: React.FC = () => {
         }
     };
 
-    const handleGoHome = () => setView('home');
+    const handleGoHome = () => {
+        stopTimer();
+        setView('home');
+    }
     const handleViewDashboard = () => setView('dashboard');
-    const handleUpgrade = () => setView('paywall');
-    const handleGoToAdmin = () => setView('admin');
-
-    const handleUpgradeSuccess = () => {
+    
+    const handleUpgradeSuccess = (tier: SubscriptionTier) => {
         if (user) {
-            const updatedUser = { ...user, isPro: true };
+            const updatedUser = { ...user, subscriptionTier: tier, unlockedExams: tier === 'Specialist' ? user.unlockedExams : [] };
+            if(tier === 'Professional') updatedUser.unlockedExams = [];
+            
             updateUser(updatedUser);
             updateCurrentUser(updatedUser);
             setUser(updatedUser);
             setView('home');
+            alert(`Upgrade to ${tier} successful! You can now choose your exam tracks.`);
         }
+    };
+
+    const handleAskFollowUp = async (originalQuestion: Question, followUpQuery: string) => {
+        if (!followUpQuery) return;
+        setIsFollowUpLoading(true);
+        setFollowUpAnswer('');
+    
+        const prompt = `
+          You are an expert tutor. A user was asked the following question:
+          "**${originalQuestion.question}**"
+    
+          The correct answer is: **${originalQuestion.answer}**
+          The provided explanation is: "${originalQuestion.explanation}"
+    
+          The user has a follow-up question: "**${followUpQuery}**"
+    
+          Please provide a concise, helpful, and direct answer to the user's follow-up question in the context of the original problem.
+        `;
+    
+        try {
+          const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+          });
+          setFollowUpAnswer(response.text);
+        } catch (e) {
+          console.error(e);
+          setFollowUpAnswer("Sorry, I couldn't generate an answer at this moment. Please try again.");
+        } finally {
+          setIsFollowUpLoading(false);
+        }
+      };
+      
+    const formatTime = (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
     };
 
     const renderContent = () => {
@@ -282,7 +388,7 @@ const App: React.FC = () => {
                 return <Login onLoginSuccess={handleLoginSuccess} />;
             case 'home':
                 if (!user) return <Login onLoginSuccess={handleLoginSuccess} />;
-                return <HomePage user={user} onStartQuiz={initiateQuizFlow} onViewDashboard={handleViewDashboard} onUpgrade={handleUpgrade} />;
+                return <HomePage user={user} onStartQuiz={initiateQuizFlow} onViewDashboard={handleViewDashboard} onUpgrade={() => setView('paywall')} />;
             case 'exam_mode_selection':
                  if (!quizSettings) return <p>Error: Quiz settings not found.</p>;
                  return <ExamModeSelector onSelectMode={handleSelectMode} examName={quizSettings.examName} onGoHome={handleGoHome} />;
@@ -301,10 +407,19 @@ const App: React.FC = () => {
                 );
             case 'quiz':
                 const currentQuestion = questions[currentQuestionIndex];
-                if (!currentQuestion) return <p>Question not found.</p>;
+                if (!currentQuestion || !user) return <p>Question not found.</p>;
                 return (
                     <div className="max-w-4xl mx-auto my-10 p-4 md:p-8">
-                        <ProgressBar current={currentQuestionIndex + 1} total={questions.length} />
+                        <div className="flex justify-between items-center mb-4">
+                           <div className="flex-1">
+                                <ProgressBar current={currentQuestionIndex + 1} total={questions.length} />
+                           </div>
+                           {timeLeft !== null && (
+                                <div className="ml-4 px-3 py-1 bg-gray-200 text-gray-800 font-semibold rounded-md">
+                                    Time: {formatTime(timeLeft)}
+                                </div>
+                           )}
+                        </div>
                         <QuestionCard 
                             questionNum={currentQuestionIndex + 1}
                             totalQuestions={questions.length}
@@ -314,12 +429,16 @@ const App: React.FC = () => {
                             onNext={handleNextQuestion}
                             isLastQuestion={currentQuestionIndex === questions.length - 1}
                             isSimulationClosedBook={simulationPhase === 'closed_book'}
+                            isPro={user.subscriptionTier !== 'Cadet'}
+                            onAskFollowUp={handleAskFollowUp}
+                            followUpAnswer={followUpAnswer}
+                            isFollowUpLoading={isFollowUpLoading}
                         />
                     </div>
                 );
             case 'score':
                 if (!quizResult || !user) return null;
-                return <ScoreScreen result={quizResult} onRestart={handleRestartQuiz} onGoHome={handleGoHome} isPro={user.isPro} onViewDashboard={handleViewDashboard} />;
+                return <ScoreScreen result={quizResult} onRestart={handleRestartQuiz} onGoHome={handleGoHome} isPro={user.subscriptionTier !== 'Cadet'} onViewDashboard={handleViewDashboard} />;
             case 'dashboard':
                 if (!user) return null;
                 return <Dashboard history={user.history} onGoHome={handleGoHome} onStartWeaknessQuiz={handleStartWeaknessQuiz} />;
@@ -338,15 +457,16 @@ const App: React.FC = () => {
              <header className="bg-white shadow-md">
                 <nav className="container mx-auto px-6 py-3 flex justify-between items-center">
                     <h1 className="text-2xl font-bold text-blue-600">InspectorPrep AI</h1>
-                    <div>
+                    <div className="flex items-center gap-4">
                         {user && view !== 'login' && (
-                            <div className="flex items-center gap-4">
-                                <span className="text-gray-700 hidden sm:inline">Welcome, {user.email}</span>
+                            <>
+                                <button onClick={handleGoHome} className="text-sm text-gray-600 hover:text-blue-600 font-semibold">Home</button>
                                 {(user.role === 'ADMIN' || user.role === 'SUB_ADMIN') && (
-                                     <button onClick={handleGoToAdmin} className="text-sm text-gray-600 hover:text-blue-600 font-semibold">Admin Panel</button>
+                                     <button onClick={() => setView('admin')} className="text-sm text-gray-600 hover:text-blue-600 font-semibold">Admin Panel</button>
                                 )}
+                                <span className="text-gray-700 hidden sm:inline">| Welcome, {user.email}</span>
                                 <button onClick={handleLogout} className="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300">Logout</button>
-                            </div>
+                            </>
                         )}
                     </div>
                 </nav>

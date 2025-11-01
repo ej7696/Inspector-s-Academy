@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, UserRole } from '../types';
+import { User, UserRole, SubscriptionTier } from '../types';
 import { getAllUsers, updateUser } from '../services/userData';
 
 interface Props {
@@ -14,8 +14,9 @@ const AdminDashboard: React.FC<Props> = ({ currentUser, onGoHome }) => {
         setUsers(getAllUsers());
     }, []);
 
-    const handleProToggle = (userToUpdate: User) => {
-        const updatedUser = { ...userToUpdate, isPro: !userToUpdate.isPro };
+    const handleTierChange = (userToUpdate: User, newTier: SubscriptionTier) => {
+        // When changing tier, reset unlocked exams to enforce new limits
+        const updatedUser = { ...userToUpdate, subscriptionTier: newTier, unlockedExams: [] };
         if (updateUser(updatedUser)) {
             setUsers(users.map(u => u.id === updatedUser.id ? updatedUser : u));
         }
@@ -23,7 +24,7 @@ const AdminDashboard: React.FC<Props> = ({ currentUser, onGoHome }) => {
 
     const handleRoleChange = (userToUpdate: User, newRole: UserRole) => {
          const lastAdmin = users.filter(u => u.role === 'ADMIN').length === 1;
-         if (userToUpdate.role === 'ADMIN' && lastAdmin) {
+         if (userToUpdate.role === 'ADMIN' && lastAdmin && newRole !== 'ADMIN') {
              alert("Cannot demote the last admin.");
              return;
          }
@@ -35,10 +36,10 @@ const AdminDashboard: React.FC<Props> = ({ currentUser, onGoHome }) => {
 
     const canManage = (targetUser: User): boolean => {
         if (currentUser.role === 'ADMIN') {
-            return true; // Admins can manage anyone
+            return true;
         }
         if (currentUser.role === 'SUB_ADMIN') {
-            return targetUser.role === 'USER'; // Sub-admins can only manage users
+            return targetUser.role === 'USER';
         }
         return false;
     }
@@ -59,7 +60,7 @@ const AdminDashboard: React.FC<Props> = ({ currentUser, onGoHome }) => {
                         <thead className="bg-gray-50">
                             <tr>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pro Status</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subscription Tier</th>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
@@ -69,20 +70,24 @@ const AdminDashboard: React.FC<Props> = ({ currentUser, onGoHome }) => {
                                 <tr key={user.id}>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{user.email}</td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm">
-                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.isPro ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                            {user.isPro ? 'Pro' : 'Free'}
+                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.subscriptionTier !== 'Cadet' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                                            {user.subscriptionTier}
                                         </span>
                                     </td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 capitalize">{user.role}</td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                                        {canManage(user) ? (
                                            <>
-                                            <button 
-                                                onClick={() => handleProToggle(user)}
-                                                className={`px-3 py-1 text-xs rounded-md ${user.isPro ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'} text-white`}
+                                            <select
+                                                value={user.subscriptionTier}
+                                                onChange={(e) => handleTierChange(user, e.target.value as SubscriptionTier)}
+                                                className="p-1 text-xs rounded-md border-gray-300"
                                             >
-                                                {user.isPro ? 'Revoke Pro' : 'Make Pro'}
-                                            </button>
+                                                <option value="Cadet">Cadet</option>
+                                                <option value="Professional">Professional</option>
+                                                <option value="Specialist">Specialist</option>
+                                            </select>
+                                            
                                             {currentUser.role === 'ADMIN' && currentUser.id !== user.id && (
                                                 <select
                                                     value={user.role}

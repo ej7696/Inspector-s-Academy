@@ -1,4 +1,4 @@
-import { User, QuizResult } from '../types';
+import { User } from '../types';
 
 // Mock user data. In a real application, this would come from a database.
 const users: User[] = [
@@ -7,7 +7,8 @@ const users: User[] = [
         email: 'admin@test.com',
         password: 'admin123',
         role: 'ADMIN',
-        isPro: true,
+        subscriptionTier: 'Specialist', // Admins have top tier
+        unlockedExams: [], // Admins have access to all, so this is irrelevant
         history: [],
     },
     {
@@ -15,7 +16,8 @@ const users: User[] = [
         email: 'subadmin@test.com',
         password: 'subadmin123',
         role: 'SUB_ADMIN',
-        isPro: true,
+        subscriptionTier: 'Specialist',
+        unlockedExams: [],
         history: [],
     },
     {
@@ -23,7 +25,8 @@ const users: User[] = [
         email: 'userpro@test.com',
         password: 'userpro123',
         role: 'USER',
-        isPro: true,
+        subscriptionTier: 'Professional',
+        unlockedExams: ["API 510 - Pressure Vessel Inspector"],
         history: [],
     },
     {
@@ -31,7 +34,17 @@ const users: User[] = [
         email: 'user@test.com',
         password: 'user123',
         role: 'USER',
-        isPro: false,
+        subscriptionTier: 'Cadet',
+        unlockedExams: [],
+        history: [],
+    },
+     {
+        id: 5,
+        email: 'specialist@test.com',
+        password: 'specialist123',
+        role: 'USER',
+        subscriptionTier: 'Specialist',
+        unlockedExams: ["API 570 - Piping Inspector", "API 653 - Aboveground Storage Tank Inspector"],
         history: [],
     },
 ];
