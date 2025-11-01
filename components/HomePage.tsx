@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { User } from '../types';
 
@@ -14,6 +15,7 @@ const categorizedExams: { [key: string]: string[] } = {
         "API 570 - Piping Inspector",
         "API 653 - Aboveground Storage Tank Inspector",
         "API 1169 - Pipeline Construction Inspector",
+        "API 936 - Refractory Personnel",
     ],
     "SIFE/SIRE/SIEE Certifications": [
         "SIFE - Source Inspector Fixed Equipment",
@@ -41,7 +43,7 @@ const HomePage: React.FC<Props> = ({ user, onStartQuiz, onViewDashboard, onUpgra
     };
 
     return (
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-4xl mx-auto py-8 px-4">
             {!user.isPro && (
                  <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-md shadow-sm mb-6" role="alert">
                     <div className="flex">
@@ -59,7 +61,6 @@ const HomePage: React.FC<Props> = ({ user, onStartQuiz, onViewDashboard, onUpgra
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     {/* Left Side: Exam Selection */}
                     <div>
-                        <h2 className="text-xl font-bold text-gray-800 mb-4">Select Your Exam</h2>
                         <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
                              {Object.entries(categorizedExams).map(([category, exams]) => (
                                 <div key={category}>
@@ -84,7 +85,6 @@ const HomePage: React.FC<Props> = ({ user, onStartQuiz, onViewDashboard, onUpgra
                     {/* Right Side: Options & Actions */}
                     <div className="space-y-6">
                          <div>
-                            <h2 className="text-xl font-bold text-gray-800 mb-4">Set Exam Options</h2>
                              <div>
                                 <label htmlFor="numQuestions" className="block text-sm font-medium text-gray-700 mb-1">
                                     Number of Questions: <span className="font-bold">{numQuestions}</span>

@@ -1,57 +1,49 @@
+
 import React from 'react';
 
 interface Props {
-  examName: string;
-  effectivityInfo: string;
-  onSelectMode: (mode: 'Open Book' | 'Closed Book') => void;
-  onBack: () => void;
+    examName: string;
+    onSelectMode: (mode: 'open' | 'closed') => void;
+    onGoHome: () => void;
 }
 
-const ExamModeSelector: React.FC<Props> = ({ examName, effectivityInfo, onSelectMode, onBack }) => {
-  return (
-    <div className="max-w-4xl mx-auto my-10 p-8 bg-white rounded-lg shadow-xl text-center">
-      <h1 className="text-3xl font-bold text-gray-800 mb-2">Select Your Exam Session</h1>
-      <p className="text-gray-600 mb-6">You are about to start an exam for: <span className="font-semibold">{examName}</span></p>
+const ExamModeSelector: React.FC<Props> = ({ examName, onSelectMode, onGoHome }) => {
+    return (
+        <div className="max-w-2xl mx-auto my-10 p-8 text-center">
+            <h1 className="text-3xl font-bold text-gray-800 mb-2">Select Your Exam Session</h1>
+            <p className="text-lg text-gray-600 mb-8">You are about to start a quiz for the <span className="font-semibold text-blue-600">{examName}</span> certification.</p>
 
-      <div className="mb-8 p-4 bg-gray-50 border border-gray-200 rounded-lg text-left">
-          <h3 className="text-md font-semibold text-gray-700 mb-2">Based on Official API Publications:</h3>
-          <div className="text-sm text-gray-600 whitespace-pre-line">{effectivityInfo}</div>
-      </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Open Book Card */}
+                <div 
+                    onClick={() => onSelectMode('open')}
+                    className="bg-white p-6 rounded-lg shadow-lg border-2 border-transparent hover:border-blue-500 hover:shadow-xl cursor-pointer transition-all"
+                >
+                    <h2 className="text-2xl font-bold text-gray-800 mb-3">Open Book</h2>
+                    <p className="text-gray-600">
+                        This session tests your ability to efficiently find and apply information from the official code documents under time pressure.
+                    </p>
+                </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Open Book Card */}
-        <div 
-          onClick={() => onSelectMode('Open Book')}
-          className="p-6 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:shadow-lg transition-all duration-300 cursor-pointer"
-        >
-          <h2 className="text-2xl font-bold text-blue-600 mb-3">Open Book</h2>
-          <p className="text-gray-600">
-            This session tests your ability to navigate the code book efficiently. Questions will require you to find specific answers, interpret clauses, and perform calculations based on provided references.
-          </p>
+                {/* Closed Book Card */}
+                <div 
+                    onClick={() => onSelectMode('closed')}
+                    className="bg-white p-6 rounded-lg shadow-lg border-2 border-transparent hover:border-blue-500 hover:shadow-xl cursor-pointer transition-all"
+                >
+                    <h2 className="text-2xl font-bold text-gray-800 mb-3">Closed Book</h2>
+                    <p className="text-gray-600">
+                        This session tests your foundational knowledge of concepts, definitions, and procedures that you must know from memory.
+                    </p>
+                </div>
+            </div>
+            <button
+                onClick={onGoHome}
+                className="mt-10 text-gray-600 hover:text-blue-600 font-semibold"
+            >
+                &larr; Or go back to exam selection
+            </button>
         </div>
-
-        {/* Closed Book Card */}
-        <div 
-          onClick={() => onSelectMode('Closed Book')}
-          className="p-6 border-2 border-gray-200 rounded-lg hover:border-green-500 hover:shadow-lg transition-all duration-300 cursor-pointer"
-        >
-          <h2 className="text-2xl font-bold text-green-600 mb-3">Closed Book</h2>
-          <p className="text-gray-600">
-            This session tests your foundational knowledge. Questions will focus on definitions, safety principles, and general procedures that you should know from memory without any reference materials.
-          </p>
-        </div>
-      </div>
-      
-      <div className="mt-10">
-        <button 
-          onClick={onBack}
-          className="text-gray-600 hover:underline"
-        >
-          &larr; Go back and change exam
-        </button>
-      </div>
-    </div>
-  );
+    );
 };
 
 export default ExamModeSelector;
