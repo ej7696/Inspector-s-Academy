@@ -24,7 +24,7 @@ const App: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [loadingMessage, setLoadingMessage] = useState('Checking session...');
     const [error, setError] = useState('');
-    const [quizSettings, setQuizSettings] = useState<{ examName: string, numQuestions: number, isTimed: boolean, topics?: string } | null>(null);
+    const [quizSettings, setQuizSettings] = useState<{ examName: string, numQuestions: number, isTimed: boolean, examMode: 'open' | 'closed' | 'simulation', topics?: string } | null>(null);
     
     const [simulationPhase, setSimulationPhase] = useState<'closed_book' | 'open_book' | null>(null);
     const [closedBookResults, setClosedBookResults] = useState<{ questions: Question[], userAnswers: (string|null)[] } | null>(null);
@@ -44,143 +44,25 @@ const App: React.FC = () => {
     }, []);
 
     useEffect(() => {
-      if (timeLeft === null || timerRef.current !== null) return;
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
   
-      if (timeLeft > 0) {
+      if (timeLeft !== null && timeLeft > 0) {
         timerRef.current = window.setInterval(() => {
-          setTimeLeft((prevTime) => (prevTime ? prevTime - 1 : 0));
+          setTimeLeft(prev => (prev !== null ? prev - 1 : null));
         }, 1000);
       } else if (timeLeft === 0) {
-        handleSubmitQuiz();
+        handleFinishQuiz();
       }
   
       return () => {
         if (timerRef.current) {
           clearInterval(timerRef.current);
-          timerRef.current = null;
         }
       };
     }, [timeLeft]);
-
-    const stopTimer = () => {
-        if (timerRef.current) {
-            clearInterval(timerRef.current);
-            timerRef.current = null;
-        }
-        setTimeLeft(null);
-    };
-
-    const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
-
-    const generateQuestions = async (mode: 'open' | 'closed', isSimulation: boolean) => {
-        if (!quizSettings) return;
-        const { examName, numQuestions, isTimed } = quizSettings;
-        
-        const questionsToGenerate = isSimulation ? Math.ceil(numQuestions / 2) : numQuestions;
-
-        setIsLoading(true);
-        setLoadingMessage(`Generating ${questionsToGenerate} ${mode}-book questions for ${quizSettings.topics ? quizSettings.topics : examName}... This may take a moment.`);
-        setError('');
-
-        const examData = examSourceData[examName];
-        if (!examData) {
-            setError(`Exam data not found for ${examName}`);
-            setIsLoading(false);
-            return;
-        }
-        
-        const modeSpecificInstructions = mode === 'open' 
-            ? "The questions should be in an 'open-book' style, requiring the user to find specific information, interpret clauses, and perform calculations based on the provided source documents. The 'reference' and 'quote' fields are critical."
-            : "The questions should be in a 'closed-book' style, testing foundational knowledge, definitions, and core concepts that an inspector should have memorized. While a reference might exist, the question should be answerable without looking it up.";
-
-        const prompt = `
-            You are an expert curriculum developer specializing in creating certification exam questions.
-            Based on the provided 'Effectivity Sheet' and 'Body of Knowledge' for the "${examName}" certification, generate a challenging, multiple-choice quiz with exactly ${questionsToGenerate} questions.
-            ${quizSettings.topics ? `The quiz should focus specifically on these topics: ${quizSettings.topics}.` : ''}
-
-            **IMPORTANT STYLE REQUIREMENT:** ${modeSpecificInstructions}
-
-            For each question:
-            1.  Ensure it is directly relevant to the provided source documents.
-            2.  Create four plausible options, with only one being correct.
-            3.  Provide the correct answer.
-            4.  Provide a brief 'explanation' for why the answer is correct.
-            5.  Provide a highly specific 'reference' to the exact section, paragraph, table, or figure in the source document where the answer can be found (e.g., "API 653, Section 4.3.3.1, Paragraph 2"). This is mandatory.
-            6.  Categorize the question based on the 'Body of Knowledge' sections (e.g., "Welding", "Nondestructive Examination", "Calculations").
-
-            Source Documents:
-            ---
-            Effectivity Sheet:
-            ${examData.effectivitySheet}
-            ---
-            Body of Knowledge:
-            ${examData.bodyOfKnowledge}
-            ---
-
-            Return the quiz as a JSON object. Do not include any introductory text or code block formatting.
-        `;
-        
-        const questionSchema = {
-            type: Type.OBJECT,
-            properties: {
-                question: { type: Type.STRING },
-                options: { type: Type.ARRAY, items: { type: Type.STRING } },
-                answer: { type: Type.STRING },
-                explanation: { type: Type.STRING },
-                reference: { type: Type.STRING },
-                category: { type: Type.STRING },
-            },
-            required: ["question", "options", "answer", "explanation", "reference", "category"],
-        };
-
-        try {
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: prompt,
-                config: {
-                    responseMimeType: "application/json",
-                    responseSchema: {
-                        type: Type.ARRAY,
-                        items: questionSchema,
-                    },
-                },
-            });
-            
-            const jsonText = response.text.trim();
-            const generatedQuestions = JSON.parse(jsonText);
-            
-            if (!Array.isArray(generatedQuestions) || generatedQuestions.length === 0) {
-                throw new Error("API returned an invalid or empty set of questions.");
-            }
-
-            if (isTimed) {
-              const timePerQuestion = 90;
-              setTimeLeft(generatedQuestions.length * timePerQuestion);
-            }
-
-            setQuestions(generatedQuestions);
-            setUserAnswers(new Array(generatedQuestions.length).fill(null));
-            setCurrentQuestionIndex(0);
-            setView('quiz');
-        } catch (e) {
-            console.error(e);
-            setError('Failed to generate the quiz. The AI may be experiencing high demand or an error occurred. Please try again in a moment.');
-            setView('home');
-        } finally {
-            setIsLoading(false);
-            setLoadingMessage('');
-        }
-    };
-    
-    const handleSelectMode = (mode: 'open' | 'closed' | 'simulation') => {
-        if (mode === 'simulation') {
-            setSimulationPhase('closed_book');
-            generateQuestions('closed', true);
-        } else {
-            setSimulationPhase(null);
-            generateQuestions(mode, false);
-        }
-    };
 
     const handleLoginSuccess = (loggedInUser: User) => {
         setUser(loggedInUser);
@@ -193,292 +75,367 @@ const App: React.FC = () => {
         setView('login');
     };
     
-    const initiateQuizFlow = (examName: string, numQuestions: number, isTimed: boolean) => {
-        if (!user) return;
-    
-        const hasAccess = user.subscriptionTier !== 'Cadet' && (user.unlockedExams.includes(examName) || user.role === 'ADMIN');
-        const canUnlock = (user.subscriptionTier === 'Professional' && user.unlockedExams.length < 1) || (user.subscriptionTier === 'Specialist' && user.unlockedExams.length < 2);
-    
-        if (hasAccess || user.subscriptionTier === 'Cadet' /* Free users can start */) {
-            setQuizSettings({ examName, numQuestions, isTimed });
-            setView('exam_mode_selection');
-        } else if (canUnlock) {
-            if (window.confirm(`Unlock "${examName}"? This will use one of your available slots for the ${user.subscriptionTier} plan.`)) {
-                const updatedUser = { ...user, unlockedExams: [...user.unlockedExams, examName] };
-                updateUser(updatedUser);
-                updateCurrentUser(updatedUser);
-                setUser(updatedUser);
-                // Immediately start the quiz after unlocking
-                setQuizSettings({ examName, numQuestions, isTimed });
-                setView('exam_mode_selection');
-            }
-        } else {
-             alert("You have reached your exam track limit. Please upgrade your plan to access more certifications.");
-             setView('paywall');
+    const handleUpgradeSuccess = (tier: SubscriptionTier) => {
+        if(user) {
+            const updatedUser = { ...user, subscriptionTier: tier };
+            setUser(updatedUser);
+            updateCurrentUser(updatedUser);
+            updateUser(updatedUser);
+            setView('home');
+        }
+    }
+
+    const handleUnlockExam = (examName: string) => {
+        if (!user || user.subscriptionTier === 'Cadet') return;
+
+        const maxUnlocks = user.subscriptionTier === 'Professional' ? 1 : 2;
+        if (user.unlockedExams.length >= maxUnlocks) {
+            alert("You have used all your available exam slots. Please upgrade to unlock more.");
+            return;
+        }
+
+        const confirmUnlock = window.confirm(`You have ${maxUnlocks - user.unlockedExams.length} exam slots available. Are you sure you want to use one to unlock "${examName}"? This choice is permanent.`);
+        
+        if (confirmUnlock) {
+            const updatedUser = { ...user, unlockedExams: [...user.unlockedExams, examName] };
+            setUser(updatedUser);
+            updateCurrentUser(updatedUser);
+            updateUser(updatedUser);
         }
     };
 
-    const handleStartWeaknessQuiz = (topics: string) => {
-        const lastExamName = user?.history[0]?.examName || "API 653 - Aboveground Storage Tank Inspector";
-        setQuizSettings({ examName: lastExamName, numQuestions: 10, isTimed: false, topics });
-        handleSelectMode('open'); 
+    const initiateQuizFlow = (examName: string, numQuestions: number, isTimed: boolean) => {
+        if (user && user.subscriptionTier !== 'Cadet' && !user.unlockedExams.includes(examName)) {
+            handleUnlockExam(examName);
+            return; 
+        }
+
+        if (user?.subscriptionTier === 'Cadet' && numQuestions > 5) {
+             setView('paywall');
+             return;
+        }
+
+        // FIX: Add a placeholder examMode to satisfy the type. It will be overwritten by the user's selection later.
+        setQuizSettings({ examName, numQuestions, isTimed, examMode: 'open' });
+        setView('exam_mode_selection');
     };
 
-    const handleSelectAnswer = (answer: string) => {
+    const startQuiz = async (examMode: 'open' | 'closed' | 'simulation') => {
+        if (!quizSettings) return;
+
+        // FIX: Persist the selected examMode in state for features like 'restart quiz'.
+        setQuizSettings(prev => ({...prev!, examMode}));
+
+        setError('');
+        setIsLoading(true);
+        setLoadingMessage('Generating your personalized mock exam with AI...');
+        setView('quiz');
+
+        let numQs = quizSettings.numQuestions;
+        let phase: 'closed_book' | 'open_book' | null = null;
+        let modeForPrompt = examMode;
+        
+        if (examMode === 'simulation') {
+            numQs = Math.floor(quizSettings.numQuestions / 2);
+            phase = 'closed_book';
+            modeForPrompt = 'closed';
+            setSimulationPhase('closed_book');
+        } else {
+            setSimulationPhase(null);
+        }
+
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+            
+            const examData = examSourceData[quizSettings.examName];
+            if (!examData) throw new Error("Exam data not found for the selected certification.");
+            
+            const prompt = `
+              You are an expert trainer for the "${quizSettings.examName}" certification.
+              Generate ${numQs} unique, high-quality multiple-choice questions for a ${modeForPrompt} mock exam session.
+              The questions must be strictly based on the following official source materials:
+              
+              EFFECTIVITY SHEET:
+              ${examData.effectivitySheet}
+
+              BODY OF KNOWLEDGE:
+              ${examData.bodyOfKnowledge}
+
+              For each question, provide:
+              - A "question" text.
+              - An array of four string "options".
+              - The correct "answer" text, which must exactly match one of the options.
+              - A "reference" string pointing to the exact section, paragraph, table, or figure (e.g., "API 653, Section 4.3.3.1, Paragraph 2").
+              - A concise "explanation" (1-3 sentences).
+              - A "category" string based on the Body of Knowledge.
+              
+              Adhere to a realistic blend for a ${modeForPrompt} session. For 'open' or 'simulation' modes, focus more on calculation and clause-lookup. For 'closed', focus on conceptual recall.
+              
+              ${quizSettings.topics ? `Focus specifically on these topics: ${quizSettings.topics}` : ''}
+              
+              Format the output as a JSON array of question objects.
+            `;
+
+            const response = await ai.models.generateContent({
+              model: 'gemini-2.5-pro',
+              contents: prompt,
+              config: {
+                responseMimeType: 'application/json'
+              }
+            });
+            const text = response.text;
+            const generatedQuestions = JSON.parse(text);
+            
+            if (!Array.isArray(generatedQuestions) || generatedQuestions.length === 0) {
+                throw new Error("AI did not return valid questions. Please try again.");
+            }
+            
+            setQuestions(generatedQuestions);
+            setCurrentQuestionIndex(0);
+            setUserAnswers(new Array(generatedQuestions.length).fill(null));
+            
+            if (quizSettings.isTimed) {
+                setTimeLeft(generatedQuestions.length * 90); // 90 seconds per question
+            } else {
+                setTimeLeft(null);
+            }
+
+        } catch (e: any) {
+            setError(`Failed to generate quiz: ${e.message}. Please check your API key and try again.`);
+            setView('home');
+        } finally {
+            setIsLoading(false);
+            setLoadingMessage('');
+        }
+    };
+    
+    const handleStartWeaknessQuiz = (topics: string) => {
+        const settings = {
+            examName: "Targeted Practice",
+            numQuestions: 10,
+            isTimed: false,
+            topics: topics,
+            // FIX: Add a placeholder examMode to satisfy the type.
+            examMode: 'open' as const
+        };
+        setQuizSettings(settings);
+        setView('exam_mode_selection');
+    };
+
+    const handleAnswerSelect = (answer: string) => {
         const newAnswers = [...userAnswers];
         newAnswers[currentQuestionIndex] = answer;
         setUserAnswers(newAnswers);
     };
-    
-    const handleNextQuestion = () => {
-        setFollowUpAnswer('');
 
-        // Paywall check for free users
-        if(user?.subscriptionTier === 'Cadet' && currentQuestionIndex >= 4) {
-            setView('paywall');
+    const handleNextQuestion = () => {
+        if (currentQuestionIndex < questions.length - 1) {
+            setCurrentQuestionIndex(currentQuestionIndex + 1);
+            setFollowUpAnswer('');
+        } else {
+            handleFinishQuiz();
+        }
+    };
+
+    const handleFinishQuiz = () => {
+        if (timerRef.current) clearInterval(timerRef.current);
+        timerRef.current = null;
+
+        if (simulationPhase === 'closed_book') {
+            setClosedBookResults({ questions, userAnswers });
+            setView('intermission');
             return;
         }
 
-        const isLastQuestion = currentQuestionIndex === questions.length - 1;
-        if (isLastQuestion) {
-            if (simulationPhase === 'closed_book') {
-                stopTimer();
-                setClosedBookResults({ questions, userAnswers });
-                setView('intermission');
-            } else {
-                handleSubmitQuiz();
-            }
-        } else {
-            setCurrentQuestionIndex(currentQuestionIndex + 1);
-        }
-    };
-
-    const startOpenBookPhase = () => {
-        setSimulationPhase('open_book');
-        generateQuestions('open', true);
-    };
-
-    const handleSubmitQuiz = () => {
-        if (!user || !quizSettings) return;
-        stopTimer();
-
         let finalQuestions = questions;
         let finalUserAnswers = userAnswers;
-        let finalScore = 0;
 
         if (simulationPhase === 'open_book' && closedBookResults) {
             finalQuestions = [...closedBookResults.questions, ...questions];
             finalUserAnswers = [...closedBookResults.userAnswers, ...userAnswers];
         }
 
-        const processedAnswers: UserAnswer[] = finalQuestions.map((q, index) => {
+        let score = 0;
+        const detailedAnswers: UserAnswer[] = finalQuestions.map((q, index) => {
             const userAnswer = finalUserAnswers[index];
             const isCorrect = userAnswer === q.answer;
-            if (isCorrect) finalScore++;
+            if (isCorrect) score++;
             return {
                 question: q.question,
-                answer: q.answer,
-                userAnswer: userAnswer || "Not Answered",
-                isCorrect,
                 options: q.options,
-                explanation: q.explanation,
-                reference: q.reference,
-                quote: q.quote,
+                answer: q.answer,
+                userAnswer: userAnswer || 'Not answered',
+                isCorrect,
                 category: q.category,
+                reference: q.reference,
+                explanation: q.explanation
             };
         });
 
         const result: QuizResult = {
             id: new Date().toISOString(),
-            examName: quizSettings.topics ? `Weakness Drill: ${quizSettings.topics}` : quizSettings.examName,
-            score: finalScore,
+            examName: quizSettings?.examName || 'Quiz',
+            score,
             totalQuestions: finalQuestions.length,
-            percentage: (finalScore / finalQuestions.length) * 100,
+            percentage: (score / finalQuestions.length) * 100,
             date: Date.now(),
-            userAnswers: processedAnswers,
+            userAnswers: detailedAnswers,
         };
         
-        if (user.subscriptionTier !== 'Cadet') {
-            const updatedUser = { ...user, history: [result, ...user.history] };
-            updateUser(updatedUser); 
-            updateCurrentUser(updatedUser); 
-            setUser(updatedUser);
-        }
         setQuizResult(result);
-        setView('score');
         
+        if (user && user.subscriptionTier !== 'Cadet') {
+            const updatedUser = { ...user, history: [...user.history, result] };
+            setUser(updatedUser);
+            updateCurrentUser(updatedUser);
+            updateUser(updatedUser);
+        }
+        
+        setView('score');
         setSimulationPhase(null);
         setClosedBookResults(null);
     };
-    
-    const handleRestartQuiz = () => {
+
+    const handleStartOpenBookPhase = () => {
+        if (!quizSettings) return;
+        const numQs = quizSettings.numQuestions - Math.floor(quizSettings.numQuestions / 2);
+        
+        const openBookSettings = {
+            ...quizSettings,
+            numQuestions: numQs,
+        };
+        setQuizSettings(openBookSettings);
+        startQuiz('open');
+        setSimulationPhase('open_book');
+    };
+
+    const restartQuiz = () => {
         if (quizSettings) {
-             setView('exam_mode_selection');
+            startQuiz(quizSettings.examMode);
         }
     };
 
-    const handleGoHome = () => {
-        stopTimer();
+    const goHome = () => {
         setView('home');
-    }
-    const handleViewDashboard = () => setView('dashboard');
-    
-    const handleUpgradeSuccess = (tier: SubscriptionTier) => {
-        if (user) {
-            const updatedUser = { ...user, subscriptionTier: tier, unlockedExams: tier === 'Specialist' ? user.unlockedExams : [] };
-            if(tier === 'Professional') updatedUser.unlockedExams = [];
-            
-            updateUser(updatedUser);
-            updateCurrentUser(updatedUser);
-            setUser(updatedUser);
-            setView('home');
-            alert(`Upgrade to ${tier} successful! You can now choose your exam tracks.`);
-        }
+        setQuizResult(null);
+        setQuestions([]);
+        setUserAnswers([]);
+        setCurrentQuestionIndex(0);
     };
 
-    const handleAskFollowUp = async (originalQuestion: Question, followUpQuery: string) => {
-        if (!followUpQuery) return;
-        setIsFollowUpLoading(true);
+    const handleAskFollowUp = async (question: Question, query: string) => {
         setFollowUpAnswer('');
-    
-        const prompt = `
-          You are an expert tutor. A user was asked the following question:
-          "**${originalQuestion.question}**"
-    
-          The correct answer is: **${originalQuestion.answer}**
-          The provided explanation is: "${originalQuestion.explanation}"
-    
-          The user has a follow-up question: "**${followUpQuery}**"
-    
-          Please provide a concise, helpful, and direct answer to the user's follow-up question in the context of the original problem.
-        `;
-    
+        setIsFollowUpLoading(true);
         try {
-          const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-          });
-          setFollowUpAnswer(response.text);
-        } catch (e) {
-          console.error(e);
-          setFollowUpAnswer("Sorry, I couldn't generate an answer at this moment. Please try again.");
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+            const prompt = `
+                CONTEXT: A user is taking a mock exam. They just answered the following question:
+                Question: "${question.question}"
+                Correct Answer: "${question.answer}"
+                Explanation: "${question.explanation}"
+                Reference: "${question.reference}"
+
+                The user has a follow-up question. Answer it concisely (2-4 sentences) in your role as an expert tutor.
+                USER'S QUESTION: "${query}"
+
+                YOUR ANSWER:
+            `;
+
+            const response = await ai.models.generateContent({
+              model: 'gemini-2.5-flash',
+              contents: prompt
+            });
+            setFollowUpAnswer(response.text);
+
+        } catch (e: any) {
+            setFollowUpAnswer(`Sorry, I couldn't get an answer for that. Error: ${e.message}`);
         } finally {
-          setIsFollowUpLoading(false);
+            setIsFollowUpLoading(false);
         }
-      };
-      
-    const formatTime = (seconds: number) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
     };
 
-    const renderContent = () => {
-        if (isLoading) {
-            return (
-                <div className="flex flex-col items-center justify-center min-h-screen">
-                    <div className="w-16 h-16 border-4 border-blue-500 border-dashed rounded-full animate-spin"></div>
-                    <p className="mt-4 text-lg text-gray-600">{loadingMessage}</p>
-                </div>
-            );
-        }
-
-        switch (view) {
-            case 'login':
-                return <Login onLoginSuccess={handleLoginSuccess} />;
-            case 'home':
-                if (!user) return <Login onLoginSuccess={handleLoginSuccess} />;
-                return <HomePage user={user} onStartQuiz={initiateQuizFlow} onViewDashboard={handleViewDashboard} onUpgrade={() => setView('paywall')} />;
-            case 'exam_mode_selection':
-                 if (!quizSettings) return <p>Error: Quiz settings not found.</p>;
-                 return <ExamModeSelector onSelectMode={handleSelectMode} examName={quizSettings.examName} onGoHome={handleGoHome} />;
-            case 'intermission':
-                return (
-                    <div className="max-w-2xl mx-auto my-10 p-8 text-center bg-white rounded-lg shadow-xl">
-                        <h2 className="text-2xl font-bold text-gray-800">Closed-Book Session Complete</h2>
-                        <p className="text-gray-600 my-4">You may now use your approved reference materials.</p>
-                        <button 
-                            onClick={startOpenBookPhase}
-                            className="bg-green-600 text-white px-8 py-3 rounded-lg font-semibold text-lg hover:bg-green-700 transition-colors"
-                        >
-                            Start Timed Open-Book Session
-                        </button>
-                    </div>
-                );
-            case 'quiz':
-                const currentQuestion = questions[currentQuestionIndex];
-                if (!currentQuestion || !user) return <p>Question not found.</p>;
-                return (
-                    <div className="max-w-4xl mx-auto my-10 p-4 md:p-8">
-                        <div className="flex justify-between items-center mb-4">
-                           <div className="flex-1">
-                                <ProgressBar current={currentQuestionIndex + 1} total={questions.length} />
-                           </div>
-                           {timeLeft !== null && (
-                                <div className="ml-4 px-3 py-1 bg-gray-200 text-gray-800 font-semibold rounded-md">
-                                    Time: {formatTime(timeLeft)}
-                                </div>
-                           )}
+    if (isLoading) {
+        return <div className="min-h-screen flex items-center justify-center"><div className="text-xl font-semibold">{loadingMessage}</div></div>;
+    }
+    
+    const renderHeader = () => {
+        if(view === 'login') return null;
+        return (
+            <header className="bg-white shadow-md">
+                <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="flex items-center justify-between h-16">
+                         <div className="flex items-center">
+                            <span className="font-bold text-xl text-gray-800">Inspector Academy Pro</span>
                         </div>
-                        <QuestionCard 
-                            questionNum={currentQuestionIndex + 1}
-                            totalQuestions={questions.length}
-                            question={currentQuestion}
-                            onSelectAnswer={handleSelectAnswer}
+                        <div className="flex items-center space-x-4">
+                            {user && <span className="text-sm font-medium text-gray-600">Welcome, {user.email}</span>}
+                            {(user?.role === 'ADMIN' || user?.role === 'SUB_ADMIN') && view !== 'admin' && (
+                                <button onClick={() => setView('admin')} className="text-sm font-semibold text-blue-600 hover:underline">Admin Panel</button>
+                            )}
+                            <button onClick={handleLogout} className="text-sm font-semibold text-gray-600 hover:underline">Logout</button>
+                        </div>
+                    </div>
+                </nav>
+                {(view === 'quiz' || view === 'intermission') && (
+                    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
+                        {quizSettings?.isTimed && timeLeft !== null && (
+                            <div className="text-center font-bold text-lg text-red-600">
+                                TIME LEFT: {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                            </div>
+                        )}
+                        <ProgressBar current={currentQuestionIndex + (closedBookResults?.questions.length || 0)} total={quizSettings?.numQuestions || 0} />
+                    </div>
+                )}
+            </header>
+        );
+    }
+
+    return (
+        <div>
+            {renderHeader()}
+            <main>
+                {view === 'login' && <Login onLoginSuccess={handleLoginSuccess} />}
+                {/* FIX: Pass the onUnlockExam prop to HomePage */}
+                {view === 'home' && user && <HomePage user={user} onStartQuiz={initiateQuizFlow} onViewDashboard={() => setView('dashboard')} onUpgrade={() => setView('paywall')} onUnlockExam={handleUnlockExam} />}
+                {view === 'exam_mode_selection' && quizSettings && <ExamModeSelector examName={quizSettings.examName} onSelectMode={startQuiz} onGoHome={goHome}/>}
+                {view === 'quiz' && questions.length > 0 && (
+                    <div className="max-w-4xl mx-auto p-4 md:p-6">
+                        <QuestionCard
+                            questionNum={currentQuestionIndex + 1 + (closedBookResults?.questions.length || 0)}
+                            totalQuestions={quizSettings?.numQuestions || 0}
+                            question={questions[currentQuestionIndex]}
+                            onSelectAnswer={handleAnswerSelect}
                             selectedAnswer={userAnswers[currentQuestionIndex]}
                             onNext={handleNextQuestion}
                             isLastQuestion={currentQuestionIndex === questions.length - 1}
                             isSimulationClosedBook={simulationPhase === 'closed_book'}
-                            isPro={user.subscriptionTier !== 'Cadet'}
+                            isPro={user?.subscriptionTier !== 'Cadet'}
                             onAskFollowUp={handleAskFollowUp}
                             followUpAnswer={followUpAnswer}
                             isFollowUpLoading={isFollowUpLoading}
                         />
                     </div>
-                );
-            case 'score':
-                if (!quizResult || !user) return null;
-                return <ScoreScreen result={quizResult} onRestart={handleRestartQuiz} onGoHome={handleGoHome} isPro={user.subscriptionTier !== 'Cadet'} onViewDashboard={handleViewDashboard} />;
-            case 'dashboard':
-                if (!user) return null;
-                return <Dashboard history={user.history} onGoHome={handleGoHome} onStartWeaknessQuiz={handleStartWeaknessQuiz} />;
-             case 'paywall':
-                return <Paywall onUpgrade={handleUpgradeSuccess} onCancel={handleGoHome} />;
-            case 'admin':
-                if (!user) return null;
-                return <AdminDashboard currentUser={user} onGoHome={handleGoHome} />;
-            default:
-                return <p>Invalid view state.</p>;
-        }
-    };
-    
-    return (
-        <div className="bg-gray-100 min-h-screen font-sans">
-             <header className="bg-white shadow-md">
-                <nav className="container mx-auto px-6 py-3 flex justify-between items-center">
-                    <h1 className="text-2xl font-bold text-blue-600">InspectorPrep AI</h1>
-                    <div className="flex items-center gap-4">
-                        {user && view !== 'login' && (
-                            <>
-                                <button onClick={handleGoHome} className="text-sm text-gray-600 hover:text-blue-600 font-semibold">Home</button>
-                                {(user.role === 'ADMIN' || user.role === 'SUB_ADMIN') && (
-                                     <button onClick={() => setView('admin')} className="text-sm text-gray-600 hover:text-blue-600 font-semibold">Admin Panel</button>
-                                )}
-                                <span className="text-gray-700 hidden sm:inline">| Welcome, {user.email}</span>
-                                <button onClick={handleLogout} className="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300">Logout</button>
-                            </>
-                        )}
-                    </div>
-                </nav>
-            </header>
-            <main>
-                {error && (
-                    <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 m-4 rounded-md" role="alert">
-                        <p className="font-bold">Error</p>
-                        <p>{error}</p>
+                )}
+                {view === 'intermission' && (
+                    <div className="max-w-2xl mx-auto my-10 p-8 text-center bg-white rounded-lg shadow-xl">
+                        <h2 className="text-2xl font-bold text-gray-800 mb-4">Closed-Book Session Complete</h2>
+                        <p className="text-gray-600 mb-6">Take a moment to prepare. When you are ready, you may begin the timed, open-book portion of the exam.</p>
+                        <button onClick={handleStartOpenBookPhase} className="bg-indigo-600 text-white px-8 py-3 rounded-lg font-semibold text-lg hover:bg-indigo-700 transition-colors">
+                            Start Open-Book Session
+                        </button>
                     </div>
                 )}
-                {renderContent()}
+                {view === 'score' && quizResult && <ScoreScreen result={quizResult} onRestart={restartQuiz} onGoHome={goHome} isPro={user?.subscriptionTier !== 'Cadet'} onViewDashboard={() => setView('dashboard')} />}
+                {view === 'dashboard' && user && <Dashboard history={user.history} onGoHome={goHome} onStartWeaknessQuiz={handleStartWeaknessQuiz} />}
+                {view === 'paywall' && <Paywall onUpgrade={handleUpgradeSuccess} onCancel={() => setView('home')} />}
+                {view === 'admin' && user && (user.role === 'ADMIN' || user.role === 'SUB_ADMIN') && <AdminDashboard currentUser={user} onGoHome={() => setView('home')} />}
+                {isLoading && !error && (
+                    <div className="min-h-screen flex flex-col items-center justify-center">
+                        <div className="text-xl font-semibold mb-4">{loadingMessage}</div>
+                        <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                    </div>
+                )}
+                {error && <div className="text-center text-red-500 p-4">{error}</div>}
             </main>
         </div>
     );

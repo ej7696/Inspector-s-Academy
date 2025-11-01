@@ -6,6 +6,7 @@ interface Props {
     onStartQuiz: (examName: string, numQuestions: number, isTimed: boolean) => void;
     onViewDashboard: () => void;
     onUpgrade: () => void;
+    onUnlockExam: (examName: string) => void;
 }
 
 const allExams: { [key: string]: string[] } = {
@@ -26,7 +27,7 @@ const allExams: { [key: string]: string[] } = {
     ]
 };
 
-const HomePage: React.FC<Props> = ({ user, onStartQuiz, onViewDashboard, onUpgrade }) => {
+const HomePage: React.FC<Props> = ({ user, onStartQuiz, onViewDashboard, onUpgrade, onUnlockExam }) => {
     const [selectedExam, setSelectedExam] = useState<string | null>("API 653 - Aboveground Storage Tank Inspector");
     const [numQuestions, setNumQuestions] = useState(10);
     const [isTimedMode, setIsTimedMode] = useState(false);
@@ -37,6 +38,12 @@ const HomePage: React.FC<Props> = ({ user, onStartQuiz, onViewDashboard, onUpgra
             setError('Please select an exam to begin.');
             return;
         }
+        
+        if (user.subscriptionTier !== 'Cadet' && !isExamUnlocked(selectedExam)) {
+            onUnlockExam(selectedExam);
+            return;
+        }
+
         setError('');
         onStartQuiz(selectedExam, numQuestions, isTimedMode);
     };
@@ -48,6 +55,32 @@ const HomePage: React.FC<Props> = ({ user, onStartQuiz, onViewDashboard, onUpgra
     }
     
     const maxQuestions = user.subscriptionTier === 'Cadet' ? 10 : 120;
+
+    const getButtonText = () => {
+        if (!selectedExam) return "Generate & Start Quiz";
+        if (user.subscriptionTier === 'Cadet') return "Start Free Preview";
+        if (isExamUnlocked(selectedExam)) return "Generate & Start Quiz";
+        
+        const maxUnlocks = user.subscriptionTier === 'Professional' ? 1 : 2;
+        if (user.unlockedExams.length < maxUnlocks) {
+            return "Unlock & Start Quiz";
+        }
+        return "Upgrade to Unlock";
+    }
+
+    const handleStartClick = () => {
+        if (!selectedExam) {
+            setError('Please select an exam to begin.');
+            return;
+        }
+
+        const maxUnlocks = user.subscriptionTier === 'Professional' ? 1 : 2;
+        if (user.subscriptionTier !== 'Cadet' && !isExamUnlocked(selectedExam) && user.unlockedExams.length >= maxUnlocks) {
+            onUpgrade(); // Go to paywall if no slots left
+        } else {
+            handleStart();
+        }
+    }
 
     return (
         <div className="max-w-4xl mx-auto py-8 px-4">
@@ -129,11 +162,11 @@ const HomePage: React.FC<Props> = ({ user, onStartQuiz, onViewDashboard, onUpgra
                         <div className="space-y-3 pt-4 border-t">
                             {error && <p className="text-red-500 text-sm text-center">{error}</p>}
                             <button
-                                onClick={handleStart}
+                                onClick={handleStartClick}
                                 className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold text-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400"
                                 disabled={!selectedExam}
                             >
-                                Generate & Start Quiz
+                                {getButtonText()}
                             </button>
                              {user.subscriptionTier !== 'Cadet' && (
                                 <button
