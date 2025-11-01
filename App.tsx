@@ -1,358 +1,356 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GoogleGenAI, Type } from "@google/genai";
+import { Question, QuizResult, User, UserAnswer } from './types';
 import HomePage from './components/HomePage';
 import QuestionCard from './components/QuestionCard';
 import ScoreScreen from './components/ScoreScreen';
-import Dashboard from './components/Dashboard';
-import Paywall from './components/Paywall';
 import ProgressBar from './components/ProgressBar';
 import Login from './components/Login';
+import Dashboard from './components/Dashboard';
 import AdminDashboard from './components/AdminDashboard';
-import { Question, UserAnswer, QuizResult, User } from './types';
-import * as authService from './services/authService';
-import * as userData from './services/userData';
+import { getCurrentUser, logout, updateCurrentUser } from './services/authService';
+import Paywall from './components/Paywall';
+import ExamModeSelector from './components/ExamModeSelector';
+import { examSourceData } from './services/examData';
 
-type View = 'home' | 'quiz' | 'score' | 'dashboard' | 'paywall' | 'admin';
+// Correct imports from @google/genai according to guidelines
+import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+type AppView = 'login' | 'home' | 'exam_mode_selection' | 'loading' | 'active' | 'complete' | 'dashboard' | 'admin_dashboard' | 'paywall';
 
 const App: React.FC = () => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [view, setView] = useState<View>('home');
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [userAnswers, setUserAnswers] = useState<UserAnswer[]>([]);
-  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
-  const [quizResult, setQuizResult] = useState<QuizResult | null>(null);
-  const [history, setHistory] = useState<QuizResult[]>([]);
-  const [quizCount, setQuizCount] = useState(0); 
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [examName, setExamName] = useState('');
-  const [isTimedMode, setIsTimedMode] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(0);
-  const timerRef = useRef<number | null>(null);
-  const [followUpResponse, setFollowUpResponse] = useState<string | null>(null);
-  const [isGettingFollowUp, setIsGettingFollowUp] = useState(false);
+    const [view, setView] = useState<AppView>('login');
+    const [user, setUser] = useState<User | null>(null);
+    const [questions, setQuestions] = useState<Question[]>([]);
+    const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+    const [userAnswers, setUserAnswers] = useState<UserAnswer[]>([]);
+    const [error, setError] = useState<string | null>(null);
+    const [quizSettings, setQuizSettings] = useState({ examName: '', numQuestions: 10, isTimed: false, topics: '', effectivityInfo: '' });
+    const [timeLeft, setTimeLeft] = useState(0);
+    const timerRef = useRef<number | null>(null);
 
+    useEffect(() => {
+        const loggedInUser = getCurrentUser();
+        if (loggedInUser) {
+            setUser(loggedInUser);
+            setView('home');
+        }
+    }, []);
 
-  useEffect(() => {
-    const user = authService.getCurrentUser();
-    if (user) {
-      setCurrentUser(user);
-      setHistory(userData.getUserHistory(user.id));
-    }
-  }, []);
+    useEffect(() => {
+        if (view === 'active' && quizSettings.isTimed) {
+            timerRef.current = window.setInterval(() => {
+                setTimeLeft(prevTime => {
+                    if (prevTime <= 1) {
+                        clearInterval(timerRef.current!);
+                        finishQuiz();
+                        return 0;
+                    }
+                    return prevTime - 1;
+                });
+            }, 1000);
+        } else {
+            if (timerRef.current) clearInterval(timerRef.current);
+        }
+        return () => {
+            if (timerRef.current) clearInterval(timerRef.current);
+        };
+    }, [view, quizSettings.isTimed]);
 
-  useEffect(() => {
-    if (view === 'quiz' && isTimedMode) {
-      const timePerQuestion = 60; // 60 seconds per question
-      setTimeLeft(questions.length * timePerQuestion);
-      
-      timerRef.current = setInterval(() => {
-        setTimeLeft(prev => {
-          if (prev <= 1) {
-            clearInterval(timerRef.current!);
-            finishQuiz();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      if (timerRef.current) clearInterval(timerRef.current);
+    const handleLogin = (loggedInUser: User) => {
+        setUser(loggedInUser);
+        setView('home');
     }
 
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+    const handleLogout = () => {
+        logout();
+        setUser(null);
+        setView('login');
+    }
+    
+    const handleUpgrade = () => {
+        if (user) {
+            const upgradedUser = { ...user, isPro: true };
+            setUser(upgradedUser);
+            updateCurrentUser(upgradedUser); // Persist change
+            setView('home');
+        }
+    }
+
+    const initiateQuizFlow = (examName: string, numQuestions: number, isTimed: boolean, topics?: string) => {
+        if (user && !user.isPro && user.history.length >= 3) {
+             setView('paywall');
+             return;
+        }
+        const effectivityInfo = examSourceData[examName]?.effectivitySheet || "Standard industry knowledge.";
+        setQuizSettings({ examName, numQuestions, isTimed, topics: topics || '', effectivityInfo });
+        setView('exam_mode_selection');
     };
-  }, [view, isTimedMode, questions.length]);
 
-  const handleLogin = () => {
-      const user = authService.getCurrentUser();
-      setCurrentUser(user);
-      if (user) {
-        setHistory(userData.getUserHistory(user.id));
-      }
-      setView('home');
-  }
+    const startQuiz = async (examMode: 'Open Book' | 'Closed Book') => {
+        setView('loading');
+        setError(null);
 
-  const handleLogout = () => {
-      authService.logout();
-      setCurrentUser(null);
-      setHistory([]);
-  }
+        if (quizSettings.isTimed) {
+            setTimeLeft(quizSettings.numQuestions * 60); // 60 seconds per question
+        }
 
-  const generateQuestions = async (topic: string, numQuestions: number, isWeaknessQuiz = false) => {
-    if (!currentUser) return;
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
 
-    if (!currentUser.isPro && quizCount >= 3) {
-      setView('paywall');
-      return;
-    }
+            const examData = examSourceData[quizSettings.examName];
+            if (!examData) {
+                throw new Error(`Exam data for "${quizSettings.examName}" not found.`);
+            }
 
-    setIsGenerating(true);
-    setError(null);
-    setExamName(topic);
+            let modeInstructions = '';
+            if (examMode === 'Open Book') {
+                modeInstructions = `The questions should be in an "Open Book" format. This means they must test the user's ability to navigate the code book to find specific answers. Focus on questions that require table lookups, chart interpretation, and applying specific clauses to scenarios. Each question MUST have a highly specific "reference" pointing to the exact section, paragraph, table, or figure (e.g., "API 653, Section 4.3.3.1, Paragraph 2") and an exact "quote" from that location.`;
+            } else { // Closed Book
+                modeInstructions = `The questions should be in a "Closed Book" format. This means they must test foundational knowledge that should be memorized. Focus on definitions, safety principles, and general procedures. These questions should NOT require a code book. References can be more general (e.g., "API 653, General Knowledge").`;
+            }
+            
+            const prompt = `You are an expert exam question writer for API certifications.
+            Generate ${quizSettings.numQuestions} multiple-choice questions for a mock exam on "${quizSettings.examName}".
+            
+            You MUST base your questions STRICTLY on the following provided documents:
+            ---
+            **Publications Effectivity Sheet (Applicable Code Editions):**
+            ${examData.effectivitySheet}
+            ---
+            **Body of Knowledge (Topics to Cover):**
+            ${examData.bodyOfKnowledge}
+            ---
 
-    const prompt = isWeaknessQuiz 
-        ? `Generate a multiple-choice quiz with ${numQuestions} questions focused on these topics: ${topic}. These are areas a user is struggling with. For each question, provide 4 options, a correct answer, a brief explanation, a reference (e.g., document section), a direct quote from the reference, and a specific category for the question.`
-        : `Generate a multiple-choice quiz with ${numQuestions} questions about ${topic}. For each question, provide 4 options, a correct answer, a brief explanation, a reference (e.g., document section), a direct quote from the reference, and a specific category for the question (e.g., "Weld Inspection", "Corrosion Calculation").`;
+            ${quizSettings.topics ? `The questions should focus specifically on these topics from the Body of Knowledge: ${quizSettings.topics}.` : ''}
+            
+            The exam session format is: **${examMode}**.
+            ${modeInstructions}
+            
+            For each question, provide:
+            1.  A "question" text.
+            2.  An array of 4 "options".
+            3.  The correct "answer" string.
+            4.  A "category" string from the Body of Knowledge (e.g., "Welding Procedures", "Corrosion Calculation").
+            5.  A highly specific "reference" string pointing to the exact location in the relevant API code from the Effectivity Sheet. It must be precise enough for a user to find it. For example: "API 653, Section 4.3.3.1, Paragraph 2" or "ASME V, Article 2, T-271.1".
+            6.  A "quote" string with the exact text from the reference that justifies the answer.
+            7.  A concise "explanation" string.
+            
+            Return the output as a valid JSON array of objects.`;
 
-    try {
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              questions: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    question: { type: Type.STRING },
-                    options: { type: Type.ARRAY, items: { type: Type.STRING } },
-                    answer: { type: Type.STRING },
-                    explanation: { type: Type.STRING },
-                    reference: { type: Type.STRING },
-                    quote: { type: Type.STRING },
-                    category: { type: Type.STRING, description: "A specific sub-topic for this question." },
-                  },
-                  required: ['question', 'options', 'answer', 'explanation', 'category']
-                },
-              },
-            },
-          },
-        },
-      });
+            const response: GenerateContentResponse = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: [{ parts: [{ text: prompt }] }],
+                config: {
+                    responseMimeType: "application/json",
+                     responseSchema: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                question: { type: Type.STRING },
+                                options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                                answer: { type: Type.STRING },
+                                category: { type: Type.STRING },
+                                reference: { type: Type.STRING },
+                                quote: { type: Type.STRING },
+                                explanation: { type: Type.STRING },
+                            },
+                            required: ["question", "options", "answer", "category", "reference", "quote", "explanation"]
+                        }
+                    }
+                }
+            });
+            
+            const generatedJson = response.text;
+            const parsedQuestions = JSON.parse(generatedJson);
+            
+            if (!Array.isArray(parsedQuestions) || parsedQuestions.length === 0) {
+                throw new Error("AI did not return valid question data.");
+            }
 
-      const responseText = response.text.trim();
-      const generatedData = JSON.parse(responseText);
-      const generatedQuestions = generatedData.questions;
-
-      if (!generatedQuestions || generatedQuestions.length === 0) {
-        throw new Error("AI failed to generate questions. Please try again.");
-      }
-      
-      setQuestions(generatedQuestions);
-      setCurrentQuestionIndex(0);
-      setUserAnswers([]);
-      setSelectedAnswer(null);
-      setFollowUpResponse(null);
-      if (!currentUser.isPro) {
-          setQuizCount(prev => prev + 1);
-      }
-      setView('quiz');
-
-    } catch (e) {
-      console.error("Error generating quiz:", e);
-      setError("Failed to generate quiz. The AI may be experiencing high demand. Please try again later.");
-      setView('home');
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  const askFollowUp = async (userFollowUp: string, originalQuestion: Question) => {
-      if (!currentUser?.isPro) return;
-      setIsGettingFollowUp(true);
-      setFollowUpResponse(null);
-      try {
-          const prompt = `A user is taking a quiz.
-          The original question was: "${originalQuestion.question}"
-          The correct answer is: "${originalQuestion.answer}"
-          The provided explanation was: "${originalQuestion.explanation}"
-          
-          The user has a follow-up question: "${userFollowUp}"
-          
-          Please provide a clear, concise answer to the user's follow-up question in the context of the original quiz item.`;
-
-          const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-          });
-          
-          setFollowUpResponse(response.text);
-
-      } catch (e) {
-          console.error("Error asking follow-up:", e);
-          setFollowUpResponse("Sorry, I couldn't process that follow-up question. Please try again.");
-      } finally {
-          setIsGettingFollowUp(false);
-      }
-  };
-
-  const handleAnswer = (answer: string) => {
-    setSelectedAnswer(answer);
-    const currentQuestion = questions[currentQuestionIndex];
-    const newAnswer: UserAnswer = { ...currentQuestion, userAnswer: answer };
-    setUserAnswers(prev => [...prev, newAnswer]);
-    setFollowUpResponse(null);
-  };
-
-  const handleNext = () => {
-    if (currentQuestionIndex < questions.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
-      setSelectedAnswer(null);
-      setFollowUpResponse(null);
-    } else {
-      finishQuiz();
-    }
-  };
-
-  const finishQuiz = () => {
-    if (!currentUser) return;
-    if (timerRef.current) clearInterval(timerRef.current);
-
-    const answeredQuestions = [...userAnswers];
-    const score = answeredQuestions.reduce((acc, ua) => {
-      return ua.userAnswer === ua.answer ? acc + 1 : acc;
-    }, 0);
-    const percentage = Math.round((score / questions.length) * 100);
-    const result: QuizResult = {
-      id: new Date().toISOString(),
-      userId: currentUser.id,
-      examName: examName,
-      date: Date.now(),
-      score,
-      percentage,
-      totalQuestions: questions.length,
-      userAnswers: answeredQuestions,
+            setQuestions(parsedQuestions);
+            setCurrentQuestionIndex(0);
+            setUserAnswers([]);
+            setView('active');
+        } catch (e) {
+            console.error(e);
+            setError("Failed to generate quiz questions. Please try again.");
+            setView('home');
+        }
     };
     
-    setQuizResult(result);
-    if(currentUser.isPro) {
-        userData.saveUserHistory(result);
-        const newHistory = [result, ...history];
-        setHistory(newHistory);
-    }
-    setView('score');
-  };
+    const handleAnswer = (answer: string, isCorrect: boolean) => {
+        const currentQ = questions[currentQuestionIndex];
+        const newAnswer: UserAnswer = {
+            question: currentQ.question,
+            options: currentQ.options,
+            answer: currentQ.answer,
+            userAnswer: answer,
+            isCorrect,
+            category: currentQ.category,
+            reference: currentQ.reference,
+            quote: currentQ.quote,
+            explanation: currentQ.explanation
+        };
+        const newAnswers = [...userAnswers];
+        newAnswers[currentQuestionIndex] = newAnswer;
+        setUserAnswers(newAnswers);
+    };
 
-  const handleRestart = () => {
-    setQuestions([]);
-    setCurrentQuestionIndex(0);
-    setUserAnswers([]);
-    setSelectedAnswer(null);
-    setQuizResult(null);
-    setError(null);
-    setView('home');
-  };
+    const handleNext = () => {
+        if (currentQuestionIndex < questions.length - 1) {
+            setCurrentQuestionIndex(currentQuestionIndex + 1);
+        } else {
+            finishQuiz();
+        }
+    };
+    
+    const handleFollowUp = async (followUpQuestion: string, context: Question): Promise<string> => {
+        try {
+            const ai = new GoogleGenAI({apiKey: process.env.API_KEY!});
+            const prompt = `The user is asking a follow-up question about a quiz answer.
+            Context:
+            - Question: "${context.question}"
+            - Correct Answer: "${context.answer}"
+            - Explanation: "${context.explanation}"
+            
+            User's follow-up question: "${followUpQuestion}"
+            
+            Provide a clear and concise answer to the user's follow-up question based on the provided context.`;
 
-  const handleUpgrade = () => {
-      if (!currentUser) return;
-      const updatedUser = { ...currentUser, isPro: true };
-      userData.updateUser(updatedUser);
-      authService.updateCurrentUser(updatedUser); // Update session
-      setCurrentUser(updatedUser);
-      setQuizCount(0);
-      setView('home');
-  };
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: [{ parts: [{ text: prompt }] }],
+            });
 
-  if (!currentUser) {
-      return <Login onLoginSuccess={handleLogin} />;
-  }
+            return response.text;
+        } catch (e) {
+            console.error(e);
+            return "Sorry, I couldn't process your question at the moment.";
+        }
+    };
 
-  const renderUserContent = () => {
-    switch (view) {
-      case 'quiz':
-        const currentQuestion = questions[currentQuestionIndex];
-        return (
-          <div className="max-w-2xl mx-auto">
-             <div className="mb-4 flex justify-between items-center">
-                <button 
-                  onClick={() => setView('home')} 
-                  className="text-blue-500 hover:underline"
-                >
-                  &larr; Back to Home
-                </button>
-                {isTimedMode && (
-                  <div className="bg-blue-100 text-blue-800 font-semibold px-3 py-1 rounded-full text-sm">
-                    Time Left: {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
-                  </div>
-                )}
-            </div>
-            <ProgressBar 
-              current={currentQuestionIndex + 1}
-              total={questions.length}
-            />
-            <QuestionCard
-              question={currentQuestion}
-              userAnswer={selectedAnswer}
-              onAnswer={handleAnswer}
-              onNext={handleNext}
-              questionNumber={currentQuestionIndex + 1}
-              totalQuestions={questions.length}
-              isLastQuestion={currentQuestionIndex === questions.length - 1}
-              isPro={currentUser.isPro}
-              onAskFollowUp={askFollowUp}
-              followUpResponse={followUpResponse}
-              isGettingFollowUp={isGettingFollowUp}
-            />
-          </div>
-        );
-      case 'score':
-        return (
-          quizResult && (
-            <ScoreScreen 
-              result={quizResult} 
-              onRestart={handleRestart}
-              onViewDashboard={() => setView('dashboard')}
-              isPro={currentUser.isPro}
-            />
-          )
-        );
-      case 'dashboard':
-        return <Dashboard 
-                  history={history} 
-                  onGoHome={() => setView('home')} 
-                  onStartWeaknessQuiz={(topics) => generateQuestions(topics, 10, true)} 
-               />;
-      case 'paywall':
-        return <Paywall onUpgrade={handleUpgrade} />;
-      case 'admin':
-         return <AdminDashboard currentUser={currentUser} onGoHome={() => setView('home')} />;
-      case 'home':
-      default:
-        return (
-          <>
-            {error && <p className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">{error}</p>}
-            <HomePage
-              onStartQuiz={generateQuestions}
-              onViewDashboard={() => setView('dashboard')}
-              isPro={currentUser.isPro}
-              onUpgrade={() => setView('paywall')}
-              isGenerating={isGenerating}
-              isTimedMode={isTimedMode}
-              setIsTimedMode={setIsTimedMode}
-            />
-          </>
-        );
-    }
-  };
+    const finishQuiz = () => {
+        if (!user) return;
+        
+        // Ensure all questions have an answer, even if unanswered (e.g. timer runs out)
+        const finalAnswers = questions.map((q, index) => {
+            if (userAnswers[index]) return userAnswers[index];
+            return {
+                 question: q.question,
+                 options: q.options,
+                 answer: q.answer,
+                 userAnswer: "Not Answered",
+                 isCorrect: false,
+                 category: q.category,
+                 reference: q.reference,
+                 quote: q.quote,
+                 explanation: q.explanation,
+            }
+        });
 
-  return (
-    <div className="bg-gray-100 min-h-screen font-sans">
+        const score = finalAnswers.filter(a => a.isCorrect).length;
+
+        const result: QuizResult = {
+            id: new Date().toISOString(),
+            examName: quizSettings.examName,
+            score,
+            totalQuestions: questions.length,
+            percentage: (score / questions.length) * 100,
+            date: Date.now(),
+            userAnswers: finalAnswers,
+        };
+        
+        const updatedUser = { ...user, history: [...user.history, result] };
+        setUser(updatedUser);
+        updateCurrentUser(updatedUser);
+        setView('complete');
+    };
+
+    const restartQuiz = () => {
+        initiateQuizFlow(quizSettings.examName, quizSettings.numQuestions, quizSettings.isTimed);
+    };
+
+    const goHome = () => {
+        setQuestions([]);
+        setView('home');
+    };
+    
+    const renderHeader = () => (
         <header className="bg-white shadow-sm">
-            <div className="container mx-auto px-4 md:px-8 py-4 flex justify-between items-center">
-                <h1 className="text-xl md:text-2xl font-bold text-gray-800">API & SIFE Certification Practice Exams</h1>
-                <div className="flex items-center gap-4">
-                  <span className="text-gray-600 hidden sm:inline">{currentUser.email}</span>
-                  {(currentUser.role === 'ADMIN' || currentUser.role === 'SUB_ADMIN') && (
-                      <button onClick={() => setView('admin')} className="font-semibold text-blue-600 hover:underline">Admin Panel</button>
-                  )}
-                  <button onClick={handleLogout} className="font-semibold text-gray-700 hover:underline">Logout</button>
-                </div>
-            </div>
+            <nav className="container mx-auto px-4 py-3 flex justify-between items-center">
+                <div className="text-xl font-bold text-gray-800">Inspector Academy</div>
+                {user && (
+                    <div className="flex items-center gap-4">
+                        <span className="text-gray-600 hidden sm:inline">Welcome, {user.email}!</span>
+                        {user.role !== 'USER' && (
+                             <button onClick={() => setView('admin_dashboard')} className="text-sm font-semibold text-gray-700 hover:text-blue-600">Admin Panel</button>
+                        )}
+                        <button onClick={handleLogout} className="text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-2 px-4 rounded-lg">Logout</button>
+                    </div>
+                )}
+            </nav>
         </header>
-      <main className="container mx-auto p-4 md:p-8">
-        {renderUserContent()}
-      </main>
-    </div>
-  );
+    );
+
+    const renderContent = () => {
+        switch (view) {
+            case 'login':
+                return <Login onLoginSuccess={handleLogin} />;
+            case 'home':
+                return user ? <HomePage user={user} onStartQuiz={initiateQuizFlow} onViewDashboard={() => setView('dashboard')} onUpgrade={() => setView('paywall')} /> : null;
+            case 'paywall':
+                return <Paywall onUpgrade={handleUpgrade} onCancel={() => setView('home')} />;
+            case 'exam_mode_selection':
+                 return <ExamModeSelector examName={quizSettings.examName} effectivityInfo={quizSettings.effectivityInfo} onSelectMode={startQuiz} onBack={goHome} />;
+            case 'loading':
+                return (
+                    <div className="text-center p-10">
+                        <h2 className="text-2xl font-semibold text-gray-700">Generating your quiz...</h2>
+                        <p className="text-gray-500 mt-2">The AI is crafting your questions. This may take a moment.</p>
+                    </div>
+                );
+            case 'active':
+                const currentQ = questions[currentQuestionIndex];
+                return currentQ ? (
+                    <div className="flex flex-col items-center">
+                         <div className="w-full max-w-3xl mb-4">
+                             <button onClick={goHome} className="text-blue-600 hover:underline mb-2">&larr; Back to Home</button>
+                             <ProgressBar current={currentQuestionIndex + 1} total={questions.length} />
+                             {quizSettings.isTimed && <div className="text-center font-mono text-2xl text-red-500 my-2">Time Left: {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}</div>}
+                        </div>
+                        <QuestionCard 
+                            key={currentQuestionIndex}
+                            question={currentQ}
+                            onAnswer={handleAnswer}
+                            onNext={handleNext}
+                            isLastQuestion={currentQuestionIndex === questions.length - 1}
+                            onFollowUp={handleFollowUp}
+                            isPro={user?.isPro || false}
+                        />
+                    </div>
+                ) : null;
+            case 'complete':
+                const lastResult = user?.history[user.history.length - 1];
+                return lastResult ? <ScoreScreen result={lastResult} onRestart={restartQuiz} onGoHome={goHome} isPro={user?.isPro || false} onViewDashboard={() => setView('dashboard')} /> : null;
+            case 'dashboard':
+                 return user ? <Dashboard history={user.history} onGoHome={goHome} onStartWeaknessQuiz={(topics) => initiateQuizFlow("Weakness-focused quiz", 10, false, topics)}/> : null;
+            case 'admin_dashboard':
+                return user && user.role !== 'USER' ? <AdminDashboard currentUser={user} onGoHome={() => setView('home')} /> : null;
+            default:
+                return null;
+        }
+    };
+
+    return (
+        <div className="bg-gray-100 min-h-screen font-sans">
+            {view !== 'login' && renderHeader()}
+            <main className="container mx-auto p-4">
+                {error && <div className="text-center text-red-500 p-4 bg-red-100 rounded-lg max-w-3xl mx-auto my-4" role="alert">{error}</div>}
+                {renderContent()}
+            </main>
+        </div>
+    );
 };
 
 export default App;

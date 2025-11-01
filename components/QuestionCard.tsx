@@ -3,163 +3,150 @@ import { Question } from '../types';
 
 interface Props {
   question: Question;
-  userAnswer: string | null;
-  onAnswer: (answer: string) => void;
+  onAnswer: (answer: string, isCorrect: boolean) => void;
   onNext: () => void;
-  questionNumber: number;
-  totalQuestions: number;
   isLastQuestion: boolean;
   isPro: boolean;
-  onAskFollowUp: (followUpQuestion: string, originalQuestion: Question) => void;
-  followUpResponse: string | null;
-  isGettingFollowUp: boolean;
+  onFollowUp: (followUpQuestion: string, context: Question) => Promise<string>;
 }
 
-const CheckIcon = () => (
-    <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
-);
-const CrossIcon = () => (
-    <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-);
-const ChevronDownIcon = () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-);
-const ChevronUpIcon = () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7"></path></svg>
-);
+const QuestionCard: React.FC<Props> = ({ question, onAnswer, onNext, isLastQuestion, isPro, onFollowUp }) => {
+  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
+  const [showExplanation, setShowExplanation] = useState(false);
+  
+  const [followUpQuestion, setFollowUpQuestion] = useState('');
+  const [followUpAnswer, setFollowUpAnswer] = useState('');
+  const [isFollowingUp, setIsFollowingUp] = useState(false);
 
+  const handleSubmit = () => {
+    if (selectedAnswer) {
+      const correct = selectedAnswer === question.answer;
+      setIsCorrect(correct);
+      onAnswer(selectedAnswer, correct);
+      setIsSubmitted(true);
+    }
+  };
 
-const QuestionCard: React.FC<Props> = ({
-  question,
-  userAnswer,
-  onAnswer,
-  onNext,
-  questionNumber,
-  totalQuestions,
-  isLastQuestion,
-  isPro,
-  onAskFollowUp,
-  followUpResponse,
-  isGettingFollowUp,
-}) => {
-  const isAnswered = userAnswer !== null;
-  const [isExplanationOpen, setIsExplanationOpen] = useState(false);
-  const [followUpQuestion, setFollowUpQuestion] = useState("");
-
-  const handleFollowUpSubmit = (e: React.FormEvent) => {
+  const handleFollowUpSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
-      if(followUpQuestion.trim()) {
-          onAskFollowUp(followUpQuestion, question);
+      if (!followUpQuestion.trim()) return;
+      setIsFollowingUp(true);
+      setFollowUpAnswer('');
+      const response = await onFollowUp(followUpQuestion, question);
+      setFollowUpAnswer(response);
+      setIsFollowingUp(false);
+  }
+
+  const getOptionClass = (option: string) => {
+    if (!isSubmitted) {
+      return selectedAnswer === option ? 'bg-blue-200 border-blue-500 ring-2 ring-blue-400' : 'bg-white hover:bg-gray-100';
+    }
+    // After submission
+    if (option === question.answer) {
+      return 'bg-green-100 border-green-500'; // Correct answer
+    }
+    if (option === selectedAnswer && option !== question.answer) {
+      return 'bg-red-100 border-red-500'; // Incorrectly selected answer
+    }
+    return 'bg-gray-100 text-gray-500 border-gray-200'; // Not selected, not correct
+  };
+  
+  const getIcon = (option: string) => {
+      if (!isSubmitted) return null;
+      if (option === question.answer) {
+        return <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>;
       }
+      if (option === selectedAnswer && option !== question.answer) {
+        return <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>;
+      }
+      return <div className="w-6 h-6"></div>; // Placeholder for alignment
   };
 
   return (
-    <div className="p-4 sm:p-6 bg-white rounded-lg shadow-lg border border-gray-200">
-      <p className="text-sm font-semibold text-gray-500 mb-2">
-        Question {questionNumber} of {totalQuestions}
-      </p>
-      <h2 className="text-xl font-bold text-gray-800 mb-6">{question.question}</h2>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {question.options.map((option) => {
-          const isSelected = userAnswer === option;
-          const isCorrect = question.answer === option;
-          let buttonClass = 'w-full text-left p-3 rounded-lg border-2 flex items-center justify-between transition-all duration-200 ';
+    <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-3xl">
+      <p className="text-lg font-semibold text-gray-800 mb-1">Question</p>
+      <p className="text-xl font-normal text-gray-700 mb-6" dangerouslySetInnerHTML={{ __html: question.question }} />
 
-          if (isAnswered) {
-            if (isCorrect) {
-              buttonClass += 'bg-green-100 border-green-500 text-green-800 font-semibold';
-            } else if (isSelected) {
-              buttonClass += 'bg-red-100 border-red-500 text-red-800 font-semibold';
-            } else {
-              buttonClass += 'bg-gray-100 border-gray-300 text-gray-600 cursor-not-allowed';
-            }
-          } else {
-            buttonClass += 'bg-white hover:bg-blue-50 border-gray-300 text-gray-700 hover:border-blue-400';
-          }
-
-          return (
-            <button
-              key={option}
-              onClick={() => onAnswer(option)}
-              disabled={isAnswered}
-              className={buttonClass}
-            >
-              <span>{option}</span>
-              {isAnswered && isCorrect && <CheckIcon />}
-              {isAnswered && isSelected && !isCorrect && <CrossIcon />}
-            </button>
-          );
-        })}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {question.options.map((option, index) => (
+          <button
+            key={index}
+            onClick={() => !isSubmitted && setSelectedAnswer(option)}
+            disabled={isSubmitted}
+            className={`flex items-center justify-between w-full text-left p-4 rounded-lg border-2 transition-all duration-200 ${getOptionClass(option)}`}
+          >
+            <span className="flex-grow" dangerouslySetInnerHTML={{ __html: `${String.fromCharCode(65 + index)}. ${option}` }} />
+            {getIcon(option)}
+          </button>
+        ))}
       </div>
+      
+      {!isSubmitted ? (
+        <div className="mt-6 text-center">
+            <button 
+                onClick={handleSubmit} 
+                disabled={!selectedAnswer}
+                className="bg-blue-600 text-white px-10 py-3 rounded-lg font-semibold text-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400"
+            >
+                Submit Answer
+            </button>
+        </div>
+      ) : (
+         <div className="mt-6">
+            <div className={`p-4 rounded-lg ${isCorrect ? 'bg-green-50' : 'bg-red-50'}`}>
+                <h3 className={`text-lg font-bold ${isCorrect ? 'text-green-800' : 'text-red-800'}`}>
+                    {isCorrect ? 'Correct!' : `Not quite - the correct answer is ${question.answer.split('.')[0]}`}
+                </h3>
+                 <p className="font-semibold mt-4 text-gray-700">Reference:</p>
+                 <p className="text-gray-600 italic">{question.reference}</p>
 
-      {isAnswered && (
-        <div className="mt-6">
-            <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <p className="text-gray-700">You said: <span className="font-semibold">{userAnswer}</span></p>
-                <div className={`mt-2 flex items-center ${userAnswer === question.answer ? 'text-green-700' : 'text-red-700'}`}>
-                    <div className="font-bold">{userAnswer === question.answer ? "Correct!" : `Not quite — the correct answer is A. ${question.answer}.`}</div>
+                 <p className="font-semibold mt-3 text-gray-700">Code Quote:</p>
+                 <p className="text-gray-600 italic bg-gray-100 p-2 rounded">"{question.quote}"</p>
+
+                <div className="mt-3">
+                    <button onClick={() => setShowExplanation(!showExplanation)} className="font-semibold text-blue-600 hover:underline">
+                       {showExplanation ? 'Hide' : 'Show'} Quick Explanation
+                    </button>
+                    {showExplanation && <p className="mt-2 text-gray-700">{question.explanation}</p>}
                 </div>
-            </div>
-
-            <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                 {question.reference && (
-                    <p className="mb-2 text-sm text-gray-600">
-                    <span className="font-bold">Reference:</span> {question.reference}
-                </p>
-                )}
-                {question.quote && (
-                    <p className="mb-4 text-sm text-gray-700 italic border-l-4 border-gray-300 pl-3">
-                    "{question.quote}"
-                </p>
-                )}
-                
-                <button 
-                    onClick={() => setIsExplanationOpen(!isExplanationOpen)} 
-                    className="w-full flex justify-between items-center text-left font-semibold text-gray-700"
-                >
-                    Quick Explanation
-                    {isExplanationOpen ? <ChevronUpIcon /> : <ChevronDownIcon />}
-                </button>
-                {isExplanationOpen && (
-                    <p className="mt-2 text-gray-700">
-                        {question.explanation}
-                    </p>
-                )}
             </div>
             
             {isPro && (
-                <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                    <label className="font-semibold text-gray-700">Ask a follow-up question</label>
-                    <form onSubmit={handleFollowUpSubmit} className="mt-2 flex flex-col sm:flex-row gap-2">
+                 <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                    <form onSubmit={handleFollowUpSubmit}>
+                        <label htmlFor="followUp" className="font-semibold text-gray-700">Ask a follow-up question:</label>
                         <textarea
+                            id="followUp"
                             value={followUpQuestion}
                             onChange={(e) => setFollowUpQuestion(e.target.value)}
-                            className="w-full p-2 border border-gray-300 rounded-lg flex-grow resize-none"
-                            placeholder="e.g., Explain this in simpler terms..."
-                            rows={1}
+                            className="w-full mt-2 p-2 border rounded-md"
+                            rows={2}
+                            placeholder="e.g., Can you explain that in simpler terms?"
                         />
-                        <button type="submit" disabled={isGettingFollowUp} className="bg-blue-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-600 disabled:bg-gray-400">
-                            {isGettingFollowUp ? 'Thinking...' : 'Ask AI'}
+                        <button type="submit" disabled={isFollowingUp} className="mt-2 bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 disabled:bg-gray-400">
+                           {isFollowingUp ? 'Thinking...' : 'Ask AI'}
                         </button>
                     </form>
-                    {followUpResponse && (
-                         <div className="mt-4 p-3 bg-white rounded-md border border-gray-200">
-                            <p className="text-gray-800">{followUpResponse}</p>
-                         </div>
+                    {followUpAnswer && (
+                        <div className="mt-3 p-3 bg-white rounded-md border">
+                             <p className="text-gray-800">{followUpAnswer}</p>
+                        </div>
                     )}
-                </div>
+                 </div>
             )}
-        </div>
-      )}
 
-      <button
-        onClick={onNext}
-        disabled={!isAnswered}
-        className="mt-6 w-full bg-blue-600 text-white p-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 transition-colors text-lg"
-      >
-        {isLastQuestion ? 'Finish Exam' : 'Next Question'}
-      </button>
+            <div className="mt-6 text-center">
+                <button 
+                    onClick={onNext} 
+                    className="bg-green-600 text-white px-10 py-3 rounded-lg font-semibold text-lg hover:bg-green-700 transition-colors"
+                >
+                    {isLastQuestion ? 'Finish Exam' : 'Next Question'}
+                </button>
+            </div>
+         </div>
+      )}
     </div>
   );
 };

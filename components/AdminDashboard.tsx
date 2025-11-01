@@ -1,178 +1,112 @@
 import React, { useState, useEffect } from 'react';
-import { User, QuizResult, UserRole } from '../types';
-import * as userData from '../services/userData';
+import { User, UserRole } from '../types';
+import { getAllUsers, updateUser } from '../services/userData';
 
 interface Props {
-  currentUser: User;
-  onGoHome: () => void;
+    currentUser: User;
+    onGoHome: () => void;
 }
 
 const AdminDashboard: React.FC<Props> = ({ currentUser, onGoHome }) => {
-  const [users, setUsers] = useState<User[]>([]);
-  const [allHistory, setAllHistory] = useState<QuizResult[]>([]);
+    const [users, setUsers] = useState<User[]>([]);
+    
+    useEffect(() => {
+        setUsers(getAllUsers());
+    }, []);
 
-  useEffect(() => {
-    // Both are synchronous, so loading them together is fine.
-    const allUsers = userData.getAllUsers();
-    setUsers(allUsers);
-    setAllHistory(userData.getAllHistory().sort((a, b) => b.date - a.date));
-  }, []);
-
-  const handleTogglePro = (userToUpdate: User) => {
-    const canManage = currentUser.role === 'ADMIN' || (currentUser.role === 'SUB_ADMIN' && userToUpdate.role === 'USER');
-
-    if (!canManage) {
-        alert("You don't have permission to perform this action.");
-        return;
-    }
-    if (userToUpdate.id === currentUser.id) {
-        alert("You cannot change your own Pro status.");
-        return;
-    }
-
-    try {
+    const handleProToggle = (userToUpdate: User) => {
         const updatedUser = { ...userToUpdate, isPro: !userToUpdate.isPro };
-        userData.updateUser(updatedUser);
-        setUsers(users.map(u => u.id === updatedUser.id ? updatedUser : u));
-    } catch (error) {
-        console.error("Failed to update user:", error);
-        alert("Failed to update user status.");
-    }
-  };
+        if (updateUser(updatedUser)) {
+            setUsers(users.map(u => u.id === updatedUser.id ? updatedUser : u));
+        }
+    };
 
-  const handleRoleChange = (userToUpdate: User, newRole: UserRole) => {
-    if (currentUser.role !== 'ADMIN') {
-        alert("You don't have permission to change user roles.");
-        return;
-    }
-    if (userToUpdate.id === currentUser.id) {
-        alert("You cannot change your own role.");
-        return;
-    }
-
-    // Prevent demoting the last admin
-    const adminCount = users.filter(u => u.role === 'ADMIN').length;
-    if (userToUpdate.role === 'ADMIN' && adminCount <= 1) {
-        alert("Cannot demote the last administrator.");
-        return;
-    }
-
-    try {
+    const handleRoleChange = (userToUpdate: User, newRole: UserRole) => {
+         const lastAdmin = users.filter(u => u.role === 'ADMIN').length === 1;
+         if (userToUpdate.role === 'ADMIN' && lastAdmin) {
+             alert("Cannot demote the last admin.");
+             return;
+         }
         const updatedUser = { ...userToUpdate, role: newRole };
-        userData.updateUser(updatedUser);
-        setUsers(users.map(u => u.id === updatedUser.id ? updatedUser : u));
-    } catch (error) {
-        console.error("Failed to update user role:", error);
-        alert("Failed to update user role.");
+        if (updateUser(updatedUser)) {
+             setUsers(users.map(u => u.id === updatedUser.id ? updatedUser : u));
+        }
+    };
+
+    const canManage = (targetUser: User): boolean => {
+        if (currentUser.role === 'ADMIN') {
+            return true; // Admins can manage anyone
+        }
+        if (currentUser.role === 'SUB_ADMIN') {
+            return targetUser.role === 'USER'; // Sub-admins can only manage users
+        }
+        return false;
     }
-  };
 
-
-  const getUserEmail = (userId: number): string => {
-    const user = users.find(u => u.id === userId);
-    return user ? user.email : 'Unknown User';
-  };
-
-  return (
-    <div className="max-w-6xl mx-auto p-4 md:p-6">
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
-        <h1 className="text-3xl font-bold text-gray-800">Admin Dashboard</h1>
-        <button onClick={onGoHome} className="bg-blue-500 text-white px-5 py-2 rounded-lg font-semibold hover:bg-blue-600 transition-colors self-start sm:self-center">
-          &larr; Back to Home
-        </button>
-      </div>
-
-      {/* User Management */}
-      <div className="mb-8 bg-white border border-gray-200 rounded-lg p-6 shadow-md">
-        <h2 className="text-2xl font-bold text-gray-800 mb-4">User Management</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left table-auto">
-            <thead className="bg-gray-50 text-xs text-gray-700 uppercase">
-              <tr>
-                <th scope="col" className="px-6 py-3">ID</th>
-                <th scope="col" className="px-6 py-3">Email</th>
-                <th scope="col" className="px-6 py-3">Role</th>
-                <th scope="col" className="px-6 py-3">Pro Status</th>
-                <th scope="col" className="px-6 py-3">Actions</th>
-                {currentUser.role === 'ADMIN' && <th scope="col" className="px-6 py-3">Change Role</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {users.map(user => {
-                const canManageUser = currentUser.role === 'ADMIN' || (currentUser.role === 'SUB_ADMIN' && user.role === 'USER');
-                return (
-                    <tr key={user.id} className="bg-white border-b hover:bg-gray-50">
-                        <td className="px-6 py-4 font-medium text-gray-900">{user.id}</td>
-                        <td className="px-6 py-4">{user.email}</td>
-                        <td className="px-6 py-4">{user.role}</td>
-                        <td className="px-6 py-4">
-                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${user.isPro ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                            {user.isPro ? 'PRO' : 'FREE'}
-                            </span>
-                        </td>
-                        <td className="px-6 py-4">
-                            {canManageUser && user.id !== currentUser.id && (
-                            <button 
-                                onClick={() => handleTogglePro(user)}
-                                className="font-medium text-blue-600 hover:underline"
-                            >
-                                Toggle Pro
-                            </button>
-                            )}
-                        </td>
-                        {currentUser.role === 'ADMIN' && (
-                             <td className="px-6 py-4">
-                                {user.id !== currentUser.id ? (
-                                    <select 
-                                        value={user.role} 
-                                        onChange={(e) => handleRoleChange(user, e.target.value as UserRole)}
-                                        className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2"
-                                    >
-                                        <option value="USER">User</option>
-                                        <option value="SUB_ADMIN">Sub-Admin</option>
-                                        <option value="ADMIN">Admin</option>
-                                    </select>
-                                ) : (
-                                    <span className="text-gray-500 italic">N/A</span>
-                                )}
-                             </td>
-                        )}
-                    </tr>
-                )
-              })}
-            </tbody>
-          </table>
+    return (
+        <div className="max-w-6xl mx-auto p-4 md:p-6">
+            <div className="flex justify-between items-center mb-6">
+                <h1 className="text-3xl font-bold text-gray-800">Admin Dashboard</h1>
+                <button onClick={onGoHome} className="bg-blue-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-600">
+                    &larr; Back to Home
+                </button>
+            </div>
+            
+            <div className="bg-white p-6 rounded-lg shadow-md">
+                <h2 className="text-xl font-semibold text-gray-700 mb-4">User Management</h2>
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pro Status</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {users.map((user) => (
+                                <tr key={user.id}>
+                                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{user.email}</td>
+                                    <td className="px-4 py-4 whitespace-nowrap text-sm">
+                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.isPro ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                            {user.isPro ? 'Pro' : 'Free'}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 capitalize">{user.role}</td>
+                                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                       {canManage(user) ? (
+                                           <>
+                                            <button 
+                                                onClick={() => handleProToggle(user)}
+                                                className={`px-3 py-1 text-xs rounded-md ${user.isPro ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'} text-white`}
+                                            >
+                                                {user.isPro ? 'Revoke Pro' : 'Make Pro'}
+                                            </button>
+                                            {currentUser.role === 'ADMIN' && currentUser.id !== user.id && (
+                                                <select
+                                                    value={user.role}
+                                                    onChange={(e) => handleRoleChange(user, e.target.value as UserRole)}
+                                                    className="p-1 text-xs rounded-md border-gray-300"
+                                                >
+                                                    <option value="USER">User</option>
+                                                    <option value="SUB_ADMIN">Sub-Admin</option>
+                                                    <option value="ADMIN">Admin</option>
+                                                </select>
+                                            )}
+                                           </>
+                                       ) : (
+                                           <span className="text-xs text-gray-400">No permissions</span>
+                                       )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
-      </div>
-
-      {/* Global Quiz History */}
-      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-md">
-        <h2 className="text-2xl font-bold text-gray-800 mb-4">Global Quiz History</h2>
-        <div className="overflow-x-auto max-h-96">
-          <table className="w-full text-left table-auto">
-            <thead className="bg-gray-50 text-xs text-gray-700 uppercase sticky top-0">
-              <tr>
-                <th scope="col" className="px-6 py-3">User</th>
-                <th scope="col" className="px-6 py-3">Exam Name</th>
-                <th scope="col" className="px-6 py-3">Score</th>
-                <th scope="col" className="px-6 py-3">Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {allHistory.map(result => (
-                <tr key={result.id} className="bg-white border-b hover:bg-gray-50">
-                  <td className="px-6 py-4">{getUserEmail(result.userId)}</td>
-                  <td className="px-6 py-4 font-medium text-gray-900">{result.examName}</td>
-                  <td className="px-6 py-4">{result.percentage}% ({result.score}/{result.totalQuestions})</td>
-                  <td className="px-6 py-4">{new Date(result.date).toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
+    );
 };
 
 export default AdminDashboard;

@@ -1,167 +1,142 @@
 import React, { useState, useMemo } from 'react';
+import { User } from '../types';
 
 interface Props {
-  onStartQuiz: (topic: string, numQuestions: number) => void;
-  onViewDashboard: () => void;
-  isPro: boolean;
-  onUpgrade: () => void;
-  isGenerating: boolean;
-  isTimedMode: boolean;
-  setIsTimedMode: (isTimed: boolean) => void;
+    user: User;
+    onStartQuiz: (examName: string, numQuestions: number, isTimed: boolean) => void;
+    onViewDashboard: () => void;
+    onUpgrade: () => void;
 }
 
-const examCategories = {
+const categorizedExams: { [key: string]: string[] } = {
     "API Certifications": [
-      "API 510 - Pressure Vessel Inspector",
-      "API 570 - Piping Inspector",
-      "API 653 - Aboveground Storage Tank Inspector",
-      "API 571 - Corrosion and Materials",
-      "API 577 - Welding Inspection and Metallurgy",
-      "API 580 - Risk Based Inspection",
-      "API 936 - Refractory Inspector",
-      "API 1169 - Pipeline Construction Inspector",
+        "API 510 - Pressure Vessel Inspector",
+        "API 570 - Piping Inspector",
+        "API 653 - Aboveground Storage Tank Inspector",
+        "API 1169 - Pipeline Construction Inspector",
     ],
     "SIFE/SIRE/SIEE Certifications": [
-      "SIFE - Source Inspector Fixed Equipment",
-      "SIRE - Source Inspector Rotating Equipment",
-      "SIEE - Source Inspector Electrical Equipment",
+        "SIFE - Source Inspector Fixed Equipment",
+        "SIRE - Source Inspector Rotating Equipment",
+        "SIEE - Source Inspector Electrical Equipment",
     ],
     "AWS Certifications": [
-      "CWI - Certified Welding Inspector",
+        "CWI - Certified Welding Inspector",
     ]
 };
 
-const HomePage: React.FC<Props> = ({
-  onStartQuiz,
-  onViewDashboard,
-  isPro,
-  onUpgrade,
-  isGenerating,
-  isTimedMode,
-  setIsTimedMode,
-}) => {
-  const [selectedExam, setSelectedExam] = useState(examCategories["API Certifications"][2]); // Default to API 653
-  const [numQuestions, setNumQuestions] = useState(10);
-  const [error, setError] = useState('');
+const HomePage: React.FC<Props> = ({ user, onStartQuiz, onViewDashboard, onUpgrade }) => {
+    const [selectedExam, setSelectedExam] = useState<string | null>("API 653 - Aboveground Storage Tank Inspector");
+    const [numQuestions, setNumQuestions] = useState(10);
+    const [isTimedMode, setIsTimedMode] = useState(false);
+    const [error, setError] = useState('');
 
-  const handleStart = () => {
-    if (!selectedExam) {
-      setError('Please select an exam.');
-      return;
-    }
-    if (numQuestions < 5 || numQuestions > 20) {
-      setError('Number of questions must be between 5 and 20.');
-      return;
-    }
-    if (!isPro && numQuestions > 10) {
-        setError('Free users can generate up to 10 questions. Please upgrade for more.');
-        setTimeout(() => onUpgrade(), 1500);
-        return;
-    }
-    setError('');
-    onStartQuiz(selectedExam, numQuestions);
-  };
+    const handleStart = () => {
+        if (!selectedExam) {
+            setError('Please select an exam to begin.');
+            return;
+        }
+        setError('');
+        onStartQuiz(selectedExam, numQuestions, isTimedMode);
+    };
 
-  return (
-    <div className="max-w-3xl mx-auto text-center">
-      <header className="mb-8">
-        <h1 className="text-4xl font-bold text-gray-800 mb-2">Interactive Mock Exam Generator</h1>
-        <p className="text-lg text-gray-600">
-          Select your exam, set the number of questions, and start your AI-powered practice session.
-        </p>
-      </header>
-      
-      <div className="bg-white p-6 md:p-8 rounded-lg shadow-md mb-6">
-        <div className="mb-6">
-            <div className="space-y-4">
-                {Object.entries(examCategories).map(([category, exams]) => (
-                    <div key={category}>
-                        <h3 className="text-lg font-semibold text-gray-700 text-left mb-2">{category}</h3>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {exams.map((exam) => (
-                                <button
-                                key={exam}
-                                onClick={() => setSelectedExam(exam)}
-                                className={`p-3 w-full text-left rounded-lg border-2 transition-all duration-200 ${
-                                    selectedExam === exam
-                                    ? 'bg-blue-500 border-blue-500 text-white font-semibold shadow-md'
-                                    : 'bg-white border-gray-300 text-gray-700 hover:border-blue-400 hover:bg-blue-50'
-                                }`}
-                                >
-                                {exam}
-                                </button>
+    return (
+        <div className="max-w-4xl mx-auto">
+            {!user.isPro && (
+                 <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-md shadow-sm mb-6" role="alert">
+                    <div className="flex">
+                        <div className="py-1"><svg className="fill-current h-6 w-6 text-yellow-500 mr-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M2.93 17.07A10 10 0 1 1 17.07 2.93 10 10 0 0 1 2.93 17.07zM9 5v6h2V5H9zm0 8v2h2v-2H9z"/></svg></div>
+                        <div>
+                            <p className="font-bold">Free Plan Limit</p>
+                            <p className="text-sm">You are on the free plan. Upgrade to Pro to unlock unlimited quizzes, performance tracking, and AI-powered study tools.</p>
+                            <button onClick={onUpgrade} className="mt-2 bg-yellow-500 text-white font-bold py-1 px-3 rounded text-sm hover:bg-yellow-600">Upgrade Now</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+           
+            <div className="bg-white p-6 rounded-lg shadow-lg">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {/* Left Side: Exam Selection */}
+                    <div>
+                        <h2 className="text-xl font-bold text-gray-800 mb-4">Select Your Exam</h2>
+                        <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
+                             {Object.entries(categorizedExams).map(([category, exams]) => (
+                                <div key={category}>
+                                    <h3 className="font-semibold text-gray-600 mt-3 mb-2">{category}</h3>
+                                    <div className="space-y-2">
+                                        {exams.map(exam => (
+                                            <button 
+                                                key={exam}
+                                                onClick={() => setSelectedExam(exam)}
+                                                className={`w-full text-left p-3 rounded-lg border-2 transition-all duration-200 ${selectedExam === exam ? 'bg-blue-100 border-blue-500 font-semibold' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'}`}
+                                                aria-pressed={selectedExam === exam}
+                                            >
+                                                {exam}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
                             ))}
                         </div>
                     </div>
-                ))}
+
+                    {/* Right Side: Options & Actions */}
+                    <div className="space-y-6">
+                         <div>
+                            <h2 className="text-xl font-bold text-gray-800 mb-4">Set Exam Options</h2>
+                             <div>
+                                <label htmlFor="numQuestions" className="block text-sm font-medium text-gray-700 mb-1">
+                                    Number of Questions: <span className="font-bold">{numQuestions}</span>
+                                </label>
+                                <input
+                                    type="range"
+                                    id="numQuestions"
+                                    min="5"
+                                    max={user.isPro ? "120" : "10"}
+                                    value={numQuestions}
+                                    onChange={(e) => setNumQuestions(parseInt(e.target.value, 10))}
+                                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                />
+                                {!user.isPro && <p className="text-xs text-gray-500 mt-1">Upgrade to Pro for up to 120 questions.</p>}
+                            </div>
+                            <div className="mt-4">
+                               <label className="flex items-center cursor-pointer">
+                                    <div className="relative">
+                                        <input type="checkbox" className="sr-only" checked={isTimedMode} onChange={() => setIsTimedMode(!isTimedMode)} />
+                                        <div className="block bg-gray-200 w-14 h-8 rounded-full"></div>
+                                        <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${isTimedMode ? 'transform translate-x-full bg-blue-500' : ''}`}></div>
+                                    </div>
+                                    <div className="ml-3 text-gray-700 font-medium">
+                                        Enable Timed Mode
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div className="space-y-3 pt-4 border-t">
+                            {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+                            <button
+                                onClick={handleStart}
+                                className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold text-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400"
+                                disabled={!selectedExam}
+                            >
+                                Generate & Start Quiz
+                            </button>
+                             {user.isPro && (
+                                <button
+                                    onClick={onViewDashboard}
+                                    className="w-full bg-gray-600 text-white py-3 rounded-lg font-semibold text-lg hover:bg-gray-700 transition-colors"
+                                >
+                                    View Performance Dashboard
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
-
-        <div className="mb-6">
-            <div className="flex flex-col sm:flex-row gap-4">
-                <div className="flex-1">
-                    <label htmlFor="numQuestions" className="block text-left font-semibold mb-2 text-gray-700">
-                        Number of Questions ({isPro ? '5-20' : '5-10 for free users'})
-                    </label>
-                    <input
-                        id="numQuestions"
-                        type="number"
-                        value={numQuestions}
-                        onChange={(e) => setNumQuestions(Number(e.target.value))}
-                        min="5"
-                        max={isPro ? "20" : "10"}
-                        className="w-full p-3 border border-gray-300 rounded-lg text-center font-semibold text-lg"
-                    />
-                </div>
-                <div className="flex-1">
-                    <label className="block text-left font-semibold mb-2 text-gray-700">
-                        Exam Mode
-                    </label>
-                    <button 
-                        onClick={() => setIsTimedMode(!isTimedMode)}
-                        className={`w-full p-3 border-2 rounded-lg font-semibold transition-colors ${
-                            isTimedMode ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-indigo-50'
-                        }`}>
-                        {isTimedMode ? 'Timed Mode Enabled' : 'Enable Timed Mode'}
-                    </button>
-                </div>
-            </div>
-        </div>
-        
-        {error && <p className="text-red-500 mb-4">{error}</p>}
-
-        <button
-          onClick={handleStart}
-          disabled={isGenerating || !selectedExam}
-          className="w-full bg-blue-600 text-white p-4 rounded-lg font-bold text-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors shadow-lg"
-        >
-          {isGenerating ? 'Generating Exam...' : 'Start Exam'}
-        </button>
-      </div>
-
-      {isPro ? (
-         <button
-            onClick={onViewDashboard}
-            className="w-full sm:w-auto bg-white border border-gray-300 text-gray-800 px-6 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors"
-        >
-            View Performance Dashboard
-        </button>
-      ) : (
-        <div className="mt-6 bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-lg shadow-md border border-blue-200 text-center">
-            <h3 className="text-2xl font-bold text-gray-800 mb-2">Unlock Your Full Potential!</h3>
-            <p className="text-gray-600 mb-4">
-                Upgrade to Pro to access performance tracking, AI weakness analysis, and unlimited quizzes.
-            </p>
-            <button
-                onClick={onUpgrade}
-                className="bg-green-500 text-white px-8 py-3 rounded-lg font-semibold hover:bg-green-600 transition-colors shadow-lg"
-            >
-                Upgrade to Pro Now
-            </button>
-        </div>
-      )}
-    </div>
-  );
+    );
 };
 
 export default HomePage;

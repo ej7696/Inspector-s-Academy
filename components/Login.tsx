@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-// Fix: Replaced dynamic await import with a static import to resolve build error.
+import { User } from '../types';
 import { login } from '../services/authService';
 
 interface Props {
-  onLoginSuccess: () => void;
+  onLoginSuccess: (user: User) => void;
 }
 
 const Login: React.FC<Props> = ({ onLoginSuccess }) => {
@@ -20,7 +20,7 @@ const Login: React.FC<Props> = ({ onLoginSuccess }) => {
     try {
       const user = login(email, password);
       if (user) {
-        onLoginSuccess();
+        onLoginSuccess(user);
       } else {
         setError('Invalid email or password.');
       }
