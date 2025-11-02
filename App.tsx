@@ -497,18 +497,20 @@ const App: React.FC = () => {
 
     return (
         <main className="container mx-auto p-4">
-            <header className="flex flex-col sm:flex-row justify-between items-center mb-6 pb-4 border-b gap-4">
-                <Logo className="h-24 w-auto"/>
-                {user && (
-                    <div className="flex flex-col sm:flex-row items-center gap-4">
-                        <span className="text-gray-600 text-center sm:text-right">Welcome, {user.email} ({user.subscriptionTier})</span>
-                        <div className="flex gap-4">
-                            {user.role !== 'USER' && <button onClick={() => setView('admin')} className="font-semibold text-indigo-600 hover:underline">Admin Panel</button>}
-                            <button onClick={handleLogout} className="font-semibold text-blue-600 hover:underline">Logout</button>
-                        </div>
-                    </div>
-                )}
-            </header>
+            {view !== 'login' && (
+              <header className="flex flex-col sm:flex-row justify-between items-center mb-6 pb-4 border-b gap-4">
+                  <Logo className="h-24 w-auto"/>
+                  {user && (
+                      <div className="flex flex-col sm:flex-row items-center gap-4">
+                          <span className="text-gray-600 text-center sm:text-right">Welcome, {user.email} ({user.subscriptionTier})</span>
+                          <div className="flex gap-4">
+                              {user.role !== 'USER' && <button onClick={() => setView('admin')} className="font-semibold text-indigo-600 hover:underline">Admin Panel</button>}
+                              <button onClick={handleLogout} className="font-semibold text-blue-600 hover:underline">Logout</button>
+                          </div>
+                      </div>
+                  )}
+              </header>
+            )}
 
             {isLoading && (
                 <div className="text-center p-10">
@@ -551,7 +553,7 @@ const App: React.FC = () => {
                         />
                     )}
                     
-                    {view === 'quiz' && questions.length > 0 && quizSettings && (
+                    {view === 'quiz' && questions.length > 0 && quizSettings && user && (
                         <div>
                             <div className="flex justify-between items-center mb-4">
                                 <h2 className="text-2xl font-bold">{quizSettings.examName} ({simulationPhase ? simulationPhase.replace('_', ' ') : quizSettings.examMode} mode)</h2>
@@ -571,10 +573,14 @@ const App: React.FC = () => {
                                 onNext={handleNextQuestion}
                                 isLastQuestion={currentQuestionIndex === questions.length - 1}
                                 isSimulationClosedBook={simulationPhase === 'closed_book'}
-                                isPro={user?.subscriptionTier !== 'Cadet'}
+                                isPro={user.subscriptionTier !== 'Cadet'}
                                 onAskFollowUp={handleAskFollowUp}
                                 followUpAnswer={followUpAnswer}
                                 isFollowUpLoading={isFollowUpLoading}
+                                onGoHome={() => {
+                                  saveQuizProgress();
+                                  setView('home');
+                                }}
                             />
                         </div>
                     )}

@@ -14,6 +14,7 @@ interface Props {
   onAskFollowUp: (question: Question, query: string) => void;
   followUpAnswer: string;
   isFollowUpLoading: boolean;
+  onGoHome?: () => void;
 }
 
 const QuestionCard: React.FC<Props> = ({ 
@@ -28,7 +29,8 @@ const QuestionCard: React.FC<Props> = ({
     isPro,
     onAskFollowUp,
     followUpAnswer,
-    isFollowUpLoading 
+    isFollowUpLoading,
+    onGoHome
 }) => {
   const [submitted, setSubmitted] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
@@ -82,7 +84,17 @@ const QuestionCard: React.FC<Props> = ({
   }
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-xl">
+    <div className="bg-white p-6 rounded-lg shadow-xl relative">
+       {isPro && onGoHome && (
+        <button
+          onClick={onGoHome}
+          className="absolute top-4 right-4 bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1 rounded-lg text-sm font-semibold transition-colors"
+          title="Save progress and return to Home"
+        >
+          🏠 Home
+        </button>
+      )}
+
       <h2 className="text-xl font-semibold text-gray-800 mb-4">Question {questionNum} of {totalQuestions}</h2>
       <p className="text-lg text-gray-700 mb-6">{question.question}</p>
       
