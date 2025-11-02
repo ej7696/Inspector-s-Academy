@@ -7,9 +7,10 @@ interface Props {
   onGoHome: () => void;
   isPro: boolean;
   onViewDashboard: () => void;
+  onRegenerate: () => void;
 }
 
-const ScoreScreen: React.FC<Props> = ({ result, onRestart, onGoHome, isPro, onViewDashboard }) => {
+const ScoreScreen: React.FC<Props> = ({ result, onRestart, onGoHome, isPro, onViewDashboard, onRegenerate }) => {
   const scoreColor = result.percentage >= 70 ? 'text-green-600' : 'text-red-600';
 
   return (
@@ -46,6 +47,14 @@ const ScoreScreen: React.FC<Props> = ({ result, onRestart, onGoHome, isPro, onVi
             Back to Home
           </button>
         </div>
+        {isPro && (
+            <button
+                onClick={onRegenerate}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-lg font-semibold text-lg transition-colors mt-6"
+            >
+                🔁 Regenerate Exam (120 New Questions)
+            </button>
+        )}
       </div>
       
       <div>

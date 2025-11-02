@@ -11,6 +11,7 @@ import ProgressBar from './components/ProgressBar';
 import ExamModeSelector from './components/ExamModeSelector';
 import InstructionsModal from './components/InstructionsModal';
 import ConfirmDialog from './components/ConfirmDialog';
+import Logo from './components/Logo';
 import { Question, QuizResult, User, UserAnswer, SubscriptionTier, InProgressQuizState } from './types';
 import { examSourceData } from './services/examData';
 import { getCurrentUser, logout as authLogout, updateCurrentUser } from './services/authService';
@@ -209,29 +210,31 @@ const App: React.FC = () => {
             if (!examData) throw new Error("Exam data not found for the selected certification.");
             
             const prompt = `
-              You are an expert trainer for the "${quizSettings.examName}" certification.
-              Generate ${numQs} unique, high-quality multiple-choice questions for a ${modeForPrompt} mock exam session.
-              The questions must be strictly based on the following official source materials:
-              
+              You are a certified API/AWS/NDT exam instructor creating official-style mock questions.
+              Generate ${numQs} unique, high-quality multiple-choice questions for the "${quizSettings.examName}" certification exam (${modeForPrompt} mode).
+              Use the official latest Body of Knowledge and Effectivity Sheet, ensuring the same difficulty and structure as the real certification. The questions must be strictly based on these source materials:
+
               EFFECTIVITY SHEET:
               ${examData.effectivitySheet}
 
               BODY OF KNOWLEDGE:
               ${examData.bodyOfKnowledge}
+              
+              - For open-book style, emphasize clause lookups and calculations (show formula or step-based logic).
+              - For closed-book, emphasize conceptual recall and judgment.
+              - Each question must be a JSON object following this exact pattern:
+                {
+                  "question": "A concise question text.",
+                  "options": ["Option A text", "Option B text", "Option C text", "Option D text"],
+                  "answer": "The full text of the correct option, exactly matching one of the four options.",
+                  "reference": "The specific code reference, e.g., 'API 510 Section 5.3.2'.",
+                  "explanation": "A short, clear reason why the answer is correct.",
+                  "category": "A relevant category from the Body of Knowledge, e.g., 'Inspection, Repairs, Corrosion'."
+                }
 
-              For each question, provide:
-              - A "question" text.
-              - An array of four string "options".
-              - The correct "answer" text, which must exactly match one of the options.
-              - A "reference" string pointing to the exact section, paragraph, table, or figure (e.g., "API 653, Section 4.3.3.1, Paragraph 2").
-              - A concise "explanation" (1-3 sentences).
-              - A "category" string based on the Body of Knowledge.
-              
-              Adhere to a realistic blend for a ${modeForPrompt} session. For 'open' or 'simulation' modes, focus more on calculation and clause-lookup. For 'closed', focus on conceptual recall.
-              
               ${quizSettings.topics ? `Focus specifically on these topics: ${quizSettings.topics}` : ''}
               
-              Format the output as a JSON array of question objects.
+              Format the final output as a valid JSON array of these question objects.
             `;
 
             const response = await ai.models.generateContent({
@@ -359,56 +362,7 @@ const App: React.FC = () => {
         }
         
         setView('score');
-        setSimulationPhase(null);
-        setClosedBookResults(null);
     };
-
-    const handleStartOpenBookPhase = () => {
-        if (!quizSettings || !closedBookResults) return;
-        const numOpenBookQs = quizSettings.numQuestions - closedBookResults.questions.length;
-        
-        const openBookSettings: QuizSettings = {
-            ...quizSettings,
-            numQuestions: numOpenBookQs,
-        };
-        setQuizSettings(openBookSettings);
-        setSimulationPhase('open_book');
-        startQuiz();
-    };
-
-    const handleResumeQuiz = () => {
-        if (user && user.inProgressQuiz) {
-            const {
-                quizSettings: savedSettings,
-                questions: savedQuestions,
-                currentQuestionIndex: savedIndex,
-                userAnswers: savedAnswers,
-                timeLeft: savedTime,
-                simulationPhase: savedPhase,
-                closedBookResults: savedResults,
-            } = user.inProgressQuiz;
-
-            setQuizSettings(savedSettings);
-            setQuestions(savedQuestions);
-            setCurrentQuestionIndex(savedIndex);
-            setUserAnswers(savedAnswers);
-            setTimeLeft(savedTime);
-            setSimulationPhase(savedPhase);
-            setClosedBookResults(savedResults);
-            
-            setView('quiz');
-        }
-    };
-    
-    const handleAbandonQuiz = () => {
-        if (user) {
-            const updatedUser = { ...user, inProgressQuiz: null };
-            setUser(updatedUser);
-            updateCurrentUser(updatedUser);
-            updateUser(updatedUser);
-        }
-    };
-
 
     const restartQuiz = () => {
         if (quizSettings) {
@@ -417,35 +371,120 @@ const App: React.FC = () => {
     };
 
     const goHome = () => {
-        if(view === 'quiz') saveQuizProgress();
-        setView('home');
+        setQuizSettings(null);
         setQuizResult(null);
         setQuestions([]);
-        setUserAnswers([]);
-        setCurrentQuestionIndex(0);
+        setView('home');
     };
+    
+    const proceedFromIntermission = async () => {
+        if (!quizSettings || !closedBookResults) return;
+        
+        setError('');
+        setIsLoading(true);
+        setLoadingMessage('Generating Open Book portion...');
+        setView('quiz');
 
-    const handleAskFollowUp = async (question: Question, query: string) => {
-        setFollowUpAnswer('');
-        setIsFollowUpLoading(true);
+        let numQs = quizSettings.numQuestions - closedBookResults.questions.length;
+        setSimulationPhase('open_book');
+
         try {
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+            const examData = examSourceData[quizSettings.examName];
+            if (!examData) throw new Error("Exam data not found.");
+            
             const prompt = `
-                CONTEXT: A user is taking a mock exam. They just answered the following question:
-                Question: "${question.question}"
-                Correct Answer: "${question.answer}"
-                Explanation: "${question.explanation}"
-                Reference: "${question.reference}"
-
-                The user has a follow-up question. Answer it concisely (2-4 sentences) in your role as an expert tutor.
-                USER'S QUESTION: "${query}"
-
-                YOUR ANSWER:
+              You are a certified API/AWS/NDT exam instructor creating the SECOND HALF (open book portion) of a simulation exam.
+              Generate ${numQs} unique, high-quality multiple-choice questions for the "${quizSettings.examName}" certification exam (open book mode).
+              These questions must NOT repeat topics or concepts from the initial closed book portion.
+              Use the official latest Body of Knowledge and Effectivity Sheet. The questions must be strictly based on these source materials:
+              EFFECTIVITY SHEET: ${examData.effectivitySheet}
+              BODY OF KNOWLEDGE: ${examData.bodyOfKnowledge}
+              Focus on clause lookups and calculations.
+              Format the output as a JSON array of question objects. Ensure the JSON is valid.
+              Each question must be a JSON object following this exact pattern:
+              {
+                "question": "A concise question text.",
+                "options": ["Option A text", "Option B text", "Option C text", "Option D text"],
+                "answer": "The full text of the correct option, exactly matching one of the four options.",
+                "reference": "The specific code reference, e.g., 'API 510 Section 5.3.2'.",
+                "explanation": "A short, clear reason why the answer is correct.",
+                "category": "A relevant category from the Body of Knowledge, e.g., 'Inspection, Repairs, Corrosion'."
+              }
             `;
 
             const response = await ai.models.generateContent({
-              model: 'gemini-2.5-flash',
-              contents: prompt
+              model: 'gemini-2.5-pro',
+              contents: prompt,
+              config: { responseMimeType: 'application/json' }
+            });
+            const text = response.text;
+            const generatedQuestions = JSON.parse(text);
+            
+            if (!Array.isArray(generatedQuestions) || generatedQuestions.length === 0) {
+                throw new Error("AI did not return valid questions for the open book section.");
+            }
+            
+            setQuestions(generatedQuestions);
+            setCurrentQuestionIndex(0);
+            setUserAnswers(new Array(generatedQuestions.length).fill(null));
+            
+            if (quizSettings.isTimed && timeLeft !== null) {
+                setTimeLeft(timeLeft + (generatedQuestions.length * 90));
+            } else if (quizSettings.isTimed) {
+                setTimeLeft(generatedQuestions.length * 90);
+            }
+
+        } catch (e: any) {
+            setError(`Failed to generate open book quiz: ${e.message}.`);
+            setView('home');
+        } finally {
+            setIsLoading(false);
+            setLoadingMessage('');
+        }
+    };
+
+    const handleResumeQuiz = () => {
+        if (!user?.inProgressQuiz) return;
+        const saved = user.inProgressQuiz;
+        setQuizSettings(saved.quizSettings);
+        setQuestions(saved.questions);
+        setCurrentQuestionIndex(saved.currentQuestionIndex);
+        setUserAnswers(saved.userAnswers);
+        setTimeLeft(saved.timeLeft);
+        setSimulationPhase(saved.simulationPhase);
+        setClosedBookResults(saved.closedBookResults);
+        setView('quiz');
+    };
+
+    const handleAbandonQuiz = () => {
+        if (!user) return;
+        const updatedUser = { ...user, inProgressQuiz: null };
+        setUser(updatedUser);
+        updateCurrentUser(updatedUser);
+        updateUser(updatedUser);
+    };
+    
+    const handleAskFollowUp = async (question: Question, query: string) => {
+        setIsFollowUpLoading(true);
+        setFollowUpAnswer('');
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+            const prompt = `
+                You are an expert AI Tutor for certification exams. A student is asking a follow-up question about a specific mock exam question.
+                
+                Original Question: "${question.question}"
+                Correct Answer: "${question.answer}"
+                Explanation: "${question.explanation}"
+                Reference: "${question.reference}"
+                
+                Student's Query: "${query}"
+                
+                Provide a clear, concise, and helpful answer to the student's query. Address their question directly, referencing the original context. Do not just repeat the explanation. If the query is vague like "explain more", elaborate on the core concept.
+            `;
+            const response = await ai.models.generateContent({
+              model: 'gemini-2.5-pro',
+              contents: prompt,
             });
             setFollowUpAnswer(response.text);
 
@@ -456,122 +495,147 @@ const App: React.FC = () => {
         }
     };
 
-    if (isLoading && view !== 'quiz') {
-        return <div className="min-h-screen flex items-center justify-center"><div className="text-xl font-semibold">{loadingMessage}</div></div>;
-    }
-    
-    const renderHeader = () => {
-        if(view === 'login') return null;
-        return (
-            <header className="bg-white shadow-md">
-                <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex items-center justify-between h-16">
-                         <div className="flex items-center">
-                            <span className="font-bold text-xl text-gray-800">Inspector Academy Pro</span>
+    return (
+        <main className="container mx-auto p-4">
+            <header className="flex flex-col sm:flex-row justify-between items-center mb-6 pb-4 border-b gap-4">
+                <Logo className="h-24 w-auto"/>
+                {user && (
+                    <div className="flex flex-col sm:flex-row items-center gap-4">
+                        <span className="text-gray-600 text-center sm:text-right">Welcome, {user.email} ({user.subscriptionTier})</span>
+                        <div className="flex gap-4">
+                            {user.role !== 'USER' && <button onClick={() => setView('admin')} className="font-semibold text-indigo-600 hover:underline">Admin Panel</button>}
+                            <button onClick={handleLogout} className="font-semibold text-blue-600 hover:underline">Logout</button>
                         </div>
-                        <div className="flex items-center space-x-4">
-                            {user && <span className="text-sm font-medium text-gray-600">Welcome, {user.email}</span>}
-                            {(user?.role === 'ADMIN' || user?.role === 'SUB_ADMIN') && view !== 'admin' && (
-                                <button onClick={() => setView('admin')} className="text-sm font-semibold text-blue-600 hover:underline">Admin Panel</button>
-                            )}
-                            <button onClick={handleLogout} className="text-sm font-semibold text-gray-600 hover:underline">Logout</button>
-                        </div>
-                    </div>
-                </nav>
-                {(view === 'quiz' || view === 'intermission') && (
-                    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
-                        {quizSettings?.isTimed && timeLeft !== null && (
-                            <div className="text-center font-bold text-lg text-red-600">
-                                TIME LEFT: {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
-                            </div>
-                        )}
-                        <ProgressBar current={currentQuestionIndex + (closedBookResults?.questions.length || 0)} total={quizSettings?.numQuestions || 0} />
                     </div>
                 )}
             </header>
-        );
-    }
 
-    return (
-        <div>
-            {renderHeader()}
-            <main>
-                {view === 'login' && <Login onLoginSuccess={handleLoginSuccess} />}
-                {view === 'home' && user && <HomePage user={user} onStartQuiz={initiateQuizFlow} onViewDashboard={() => setView('dashboard')} onUpgrade={() => setView('paywall')} onResumeQuiz={handleResumeQuiz} onAbandonQuiz={handleAbandonQuiz} />}
-                {view === 'exam_mode_selection' && quizSettings && <ExamModeSelector examName={quizSettings.examName} onSelectMode={handleModeSelected} onGoHome={goHome}/>}
-                {view === 'instructions' && quizSettings && (
-                    <InstructionsModal
-                        examName={quizSettings.examName}
-                        bodyOfKnowledge={examSourceData[quizSettings.examName]?.bodyOfKnowledge || 'No specific instructions available.'}
-                        onStart={startQuiz}
-                        onCancel={() => user?.subscriptionTier === 'Cadet' ? goHome() : setView('exam_mode_selection')}
-                    />
-                )}
-                {view === 'quiz' && isLoading && (
-                     <div className="min-h-screen flex flex-col items-center justify-center">
-                        <div className="text-xl font-semibold mb-4">{loadingMessage}</div>
-                        <div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-blue-600"></div>
-                    </div>
-                )}
-                {view === 'quiz' && !isLoading && questions.length > 0 && (
-                    <div className="max-w-4xl mx-auto py-8 px-4">
-                        <QuestionCard
-                            questionNum={currentQuestionIndex + 1 + (closedBookResults?.questions.length || 0)}
-                            totalQuestions={quizSettings?.numQuestions || 0}
-                            question={questions[currentQuestionIndex]}
-                            onSelectAnswer={handleAnswerSelect}
-                            selectedAnswer={userAnswers[currentQuestionIndex]}
-                            onNext={handleNextQuestion}
-                            isLastQuestion={currentQuestionIndex === questions.length - 1}
-                            isSimulationClosedBook={simulationPhase === 'closed_book'}
-                            isPro={user?.subscriptionTier !== 'Cadet'}
-                            onAskFollowUp={handleAskFollowUp}
-                            followUpAnswer={followUpAnswer}
-                            isFollowUpLoading={isFollowUpLoading}
+            {isLoading && (
+                <div className="text-center p-10">
+                    <p className="text-xl font-semibold text-gray-700">{loadingMessage}</p>
+                    <div className="mt-4 w-16 h-16 border-4 border-blue-500 border-dashed rounded-full animate-spin mx-auto"></div>
+                </div>
+            )}
+
+            {!isLoading && error && <div className="bg-red-100 text-red-700 p-4 rounded-lg mb-4">{error}</div>}
+
+            {!isLoading && !error && (
+                <>
+                    {view === 'login' && <Login onLoginSuccess={handleLoginSuccess} />}
+                    
+                    {view === 'home' && user && (
+                        <HomePage 
+                            user={user} 
+                            onStartQuiz={initiateQuizFlow} 
+                            onViewDashboard={() => setView('dashboard')}
+                            onUpgrade={() => setView('paywall')}
+                            onResumeQuiz={handleResumeQuiz}
+                            onAbandonQuiz={handleAbandonQuiz}
                         />
-                    </div>
-                )}
-                {view === 'intermission' && (
-                    <div className="max-w-2xl mx-auto my-10 p-8 text-center bg-white rounded-lg shadow-xl">
-                        <h1 className="text-2xl font-bold text-gray-800 mb-4">Closed Book Session Complete</h1>
-                        <p className="text-gray-600 mb-6">Take a moment to prepare for the timed open book session. You will be tested on your ability to navigate the code books.</p>
-                        <button onClick={handleStartOpenBookPhase} className="bg-indigo-600 text-white px-8 py-3 rounded-lg font-semibold text-lg hover:bg-indigo-700 transition-colors">
-                            Start Open Book Session
-                        </button>
-                    </div>
-                )}
-                {view === 'score' && quizResult && <ScoreScreen result={quizResult} onRestart={restartQuiz} onGoHome={goHome} isPro={user?.subscriptionTier !== 'Cadet'} onViewDashboard={() => setView('dashboard')} />}
-                {view === 'dashboard' && user && <Dashboard history={user.history} onGoHome={goHome} onStartWeaknessQuiz={handleStartWeaknessQuiz} />}
-                {view === 'admin' && user && <AdminDashboard currentUser={user} onGoHome={goHome} />}
-                {view === 'paywall' && <Paywall onUpgrade={handleUpgradeSuccess} onCancel={goHome} />}
-                 {error && (
-                    <div className="fixed bottom-4 right-4 bg-red-500 text-white p-4 rounded-lg shadow-lg">
-                        <p className="font-bold">Error</p>
-                        <p>{error}</p>
-                    </div>
-                )}
-                {pendingUnlock && (
-                  <ConfirmDialog
-                    open={true}
-                    title="Unlock Exam?"
-                    message={pendingUnlock.message}
-                    onCancel={() => setPendingUnlock(null)}
-                    onConfirm={() => {
-                      if (!user) return;
-                      const { examName, numQuestions, isTimed, topics } = pendingUnlock;
-                      const updatedUser = { ...user, unlockedExams: [...user.unlockedExams, examName] };
-                      setUser(updatedUser);
-                      updateCurrentUser(updatedUser);
-                      updateUser(updatedUser);
-      
-                      setPendingUnlock(null);
-                      setQuizSettings({ examName, numQuestions, isTimed, examMode: 'open', topics });
-                      setView('exam_mode_selection');
-                    }}
-                  />
-                )}
-            </main>
-        </div>
+                    )}
+
+                    {view === 'exam_mode_selection' && quizSettings && (
+                        <ExamModeSelector 
+                            examName={quizSettings.examName} 
+                            onSelectMode={handleModeSelected}
+                            onGoHome={goHome}
+                        />
+                    )}
+
+                    {view === 'instructions' && quizSettings && (
+                        <InstructionsModal 
+                            examName={quizSettings.examName}
+                            bodyOfKnowledge={examSourceData[quizSettings.examName]?.bodyOfKnowledge || "No details available."}
+                            onStart={startQuiz}
+                            onCancel={() => user?.subscriptionTier === 'Cadet' ? goHome() : setView('exam_mode_selection')}
+                        />
+                    )}
+                    
+                    {view === 'quiz' && questions.length > 0 && quizSettings && (
+                        <div>
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-2xl font-bold">{quizSettings.examName} ({simulationPhase ? simulationPhase.replace('_', ' ') : quizSettings.examMode} mode)</h2>
+                                {timeLeft !== null && (
+                                    <div className="text-lg font-semibold bg-gray-200 px-4 py-2 rounded-lg">
+                                        Time Left: {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                                    </div>
+                                )}
+                            </div>
+                            <ProgressBar current={currentQuestionIndex + 1} total={questions.length} />
+                            <QuestionCard 
+                                questionNum={currentQuestionIndex + 1}
+                                totalQuestions={questions.length}
+                                question={questions[currentQuestionIndex]}
+                                onSelectAnswer={handleAnswerSelect}
+                                selectedAnswer={userAnswers[currentQuestionIndex]}
+                                onNext={handleNextQuestion}
+                                isLastQuestion={currentQuestionIndex === questions.length - 1}
+                                isSimulationClosedBook={simulationPhase === 'closed_book'}
+                                isPro={user?.subscriptionTier !== 'Cadet'}
+                                onAskFollowUp={handleAskFollowUp}
+                                followUpAnswer={followUpAnswer}
+                                isFollowUpLoading={isFollowUpLoading}
+                            />
+                        </div>
+                    )}
+                    
+                    {view === 'intermission' && (
+                        <div className="max-w-2xl mx-auto my-10 p-8 bg-white rounded-lg shadow-xl text-center">
+                            <h2 className="text-2xl font-bold text-gray-800 mb-2">Closed Book Section Complete</h2>
+                            <p className="text-gray-600 mb-6">You will now proceed to the open book section of the exam.</p>
+                            <button onClick={proceedFromIntermission} className="bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold text-lg hover:bg-blue-700">
+                                Start Open Book Section
+                            </button>
+                        </div>
+                    )}
+
+                    {view === 'score' && quizResult && user && (
+                        <ScoreScreen
+                            result={quizResult}
+                            onRestart={restartQuiz}
+                            onGoHome={goHome}
+                            isPro={user.subscriptionTier !== 'Cadet'}
+                            onViewDashboard={() => setView('dashboard')}
+                            onRegenerate={() => {
+                                if (!quizSettings) return;
+                                startQuiz(); 
+                            }}
+                        />
+                    )}
+
+                    {view === 'dashboard' && user && (
+                        <Dashboard 
+                            history={user.history} 
+                            onGoHome={goHome}
+                            onStartWeaknessQuiz={handleStartWeaknessQuiz}
+                        />
+                    )}
+
+                    {view === 'paywall' && <Paywall onUpgrade={handleUpgradeSuccess} onCancel={() => setView('home')} />}
+                    
+                    {view === 'admin' && user && <AdminDashboard currentUser={user} onGoHome={goHome} />}
+                </>
+            )}
+            
+            {pendingUnlock && user && (
+              <ConfirmDialog
+                open={true}
+                title="Unlock Exam?"
+                message={pendingUnlock.message}
+                onCancel={() => setPendingUnlock(null)}
+                onConfirm={() => {
+                  const { examName, numQuestions, isTimed, topics } = pendingUnlock;
+                  const updatedUser = { ...user, unlockedExams: [...user.unlockedExams, examName] };
+                  setUser(updatedUser);
+                  updateCurrentUser(updatedUser);
+                  updateUser(updatedUser);
+                  setPendingUnlock(null);
+                  setQuizSettings({ examName, numQuestions, isTimed, examMode: 'open', topics });
+                  setView('exam_mode_selection');
+                }}
+              />
+            )}
+        </main>
     );
 };
 
