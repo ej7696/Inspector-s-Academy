@@ -143,7 +143,7 @@ const QuestionCard: React.FC<Props> = ({
 
                             {isPro && (
                                 <div className="pt-4 border-t border-gray-200">
-                                    <h4 className="font-semibold text-gray-700 mb-2">Ask a follow-up question (AI Tutor)</h4>
+                                    <h4 className="font-semibold text-gray-700 mb-2">Ask a follow-up question (Virtual Tutor)</h4>
                                     <div className="flex gap-2">
                                         <input 
                                             type="text"

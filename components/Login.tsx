@@ -76,7 +76,7 @@ const Login: React.FC<Props> = ({ onLoginSuccess }) => {
                     Unlock Your Expertise
                 </h2>
                 <p className="text-blue-200 mt-2" style={{ fontFamily: 'Poppins, sans-serif' }}>
-                    AI-powered practice for API, ASME, and AWS certifications.
+                    Professional practice for API, ASME, and AWS certifications.
                 </p>
             </div>
 

@@ -1,5 +1,5 @@
 {
   "name": "Inspector's Academy",
-  "description": "An interactive web application to help users practice for various API and SIFE/SIRE/SIEE certification exams, featuring AI-generated mock exams.",
+  "description": "An interactive web application to help users practice for various API and SIFE/SIRE/SIEE certification exams, featuring interactive mock exams.",
   "requestFramePermissions": []
 }

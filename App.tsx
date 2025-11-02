@@ -187,7 +187,7 @@ const App: React.FC = () => {
 
         setError('');
         setIsLoading(true);
-        setLoadingMessage('Generating your personalized mock exam with AI...');
+        setLoadingMessage('Generating your personalized mock exam...');
         setView('quiz');
 
         let numQs = quizSettings.numQuestions;

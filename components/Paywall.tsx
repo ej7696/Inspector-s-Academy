@@ -29,7 +29,7 @@ const Paywall: React.FC<Props> = ({ onUpgrade, onCancel }) => {
         'Unlimited Quizzes & Questions (up to 120)',
         'Timed & Full Simulation Modes',
         'Performance Dashboard & History',
-        'All AI-Powered Study Tools'
+        'All Smart Study Tools'
       ],
       cta: 'Upgrade to Professional',
       tier: 'Professional' as SubscriptionTier
