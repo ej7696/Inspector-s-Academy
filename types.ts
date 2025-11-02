@@ -1,15 +1,29 @@
-import { QuizSettings } from "./App";
+export interface QuizSettings { 
+    examName: string; 
+    numQuestions: number; 
+    isTimed: boolean; 
+    examMode: 'open' | 'closed' | 'simulation'; 
+    topics?: string; 
+}
+
+export interface Question {
+  question: string;
+  options: string[];
+  answer: string;
+  reference: string;
+  explanation: string;
+  category: string;
+}
 
 export interface UserAnswer {
   question: string;
+  options: string[];
   answer: string;
   userAnswer: string;
   isCorrect: boolean;
-  category?: string;
-  options: string[];
-  reference?: string;
-  quote?: string;
-  explanation?: string;
+  category: string;
+  reference: string;
+  explanation: string;
 }
 
 export interface QuizResult {
@@ -22,37 +36,33 @@ export interface QuizResult {
   userAnswers: UserAnswer[];
 }
 
-export interface Question {
-  question: string;
-  options: string[];
-  answer: string;
-  reference?: string;
-  quote?: string;
-  explanation?: string;
-  category?: string;
-}
-
-export type UserRole = 'USER' | 'SUB_ADMIN' | 'ADMIN';
 export type SubscriptionTier = 'Cadet' | 'Professional' | 'Specialist';
 
+export type UserRole = 'USER' | 'ADMIN' | 'SUB_ADMIN';
+
 export interface InProgressQuizState {
-  quizSettings: QuizSettings;
-  questions: Question[];
-  currentQuestionIndex: number;
-  userAnswers: (string | null)[];
-  timeLeft: number | null;
-  simulationPhase: 'closed_book' | 'open_book' | null;
-  closedBookResults: { questions: Question[], userAnswers: (string|null)[] } | null;
+    quizSettings: QuizSettings;
+    questions: Question[];
+    currentQuestionIndex: number;
+    userAnswers: (string | null)[];
+    timeLeft: number | null;
+    simulationPhase: 'closed_book' | 'open_book' | null;
+    closedBookResults: {
+        questions: Question[];
+        userAnswers: (string | null)[];
+    } | null;
 }
 
 export interface User {
-  id: number;
+  id: string;
   email: string;
-  password?: string;
-  role: UserRole;
+  password: string;
   subscriptionTier: SubscriptionTier;
+  subscriptionExpiresAt?: number;
   unlockedExams: string[];
   history: QuizResult[];
-  subscriptionExpiresAt?: number;
-  inProgressQuiz?: InProgressQuizState | null;
+  inProgressQuiz: InProgressQuizState | null;
+  role: UserRole;
+  createdAt: number;
+  lastActive: number;
 }

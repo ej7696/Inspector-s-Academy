@@ -12,12 +12,13 @@ import ExamModeSelector from './components/ExamModeSelector';
 import InstructionsModal from './components/InstructionsModal';
 import ConfirmDialog from './components/ConfirmDialog';
 import Logo from './components/Logo';
+import UserProfile from './components/UserProfile';
 import { Question, QuizResult, User, UserAnswer, SubscriptionTier, InProgressQuizState } from './types';
 import { examSourceData } from './services/examData';
 import { getCurrentUser, logout as authLogout, updateCurrentUser } from './services/authService';
 import { updateUser } from './services/userData';
 
-type View = 'login' | 'home' | 'exam_mode_selection' | 'instructions' | 'quiz' | 'score' | 'dashboard' | 'paywall' | 'admin' | 'intermission';
+type View = 'login' | 'home' | 'exam_mode_selection' | 'instructions' | 'quiz' | 'score' | 'dashboard' | 'paywall' | 'admin' | 'intermission' | 'profile';
 export type QuizSettings = { examName: string, numQuestions: number, isTimed: boolean, examMode: 'open' | 'closed' | 'simulation', topics?: string };
 
 const App: React.FC = () => {
@@ -241,7 +242,25 @@ const App: React.FC = () => {
               model: 'gemini-2.5-pro',
               contents: prompt,
               config: {
-                responseMimeType: 'application/json'
+                responseMimeType: 'application/json',
+                responseSchema: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      question: { type: Type.STRING },
+                      options: {
+                        type: Type.ARRAY,
+                        items: { type: Type.STRING },
+                      },
+                      answer: { type: Type.STRING },
+                      reference: { type: Type.STRING },
+                      explanation: { type: Type.STRING },
+                      category: { type: Type.STRING },
+                    },
+                    required: ['question', 'options', 'answer', 'reference', 'explanation', 'category'],
+                  },
+                }
               }
             });
             const text = response.text;
@@ -416,7 +435,27 @@ const App: React.FC = () => {
             const response = await ai.models.generateContent({
               model: 'gemini-2.5-pro',
               contents: prompt,
-              config: { responseMimeType: 'application/json' }
+              config: { 
+                responseMimeType: 'application/json',
+                responseSchema: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      question: { type: Type.STRING },
+                      options: {
+                        type: Type.ARRAY,
+                        items: { type: Type.STRING },
+                      },
+                      answer: { type: Type.STRING },
+                      reference: { type: Type.STRING },
+                      explanation: { type: Type.STRING },
+                      category: { type: Type.STRING },
+                    },
+                    required: ['question', 'options', 'answer', 'reference', 'explanation', 'category'],
+                  },
+                }
+              }
             });
             const text = response.text;
             const generatedQuestions = JSON.parse(text);
@@ -494,6 +533,14 @@ const App: React.FC = () => {
             setIsFollowUpLoading(false);
         }
     };
+    
+    const handleUpdateUser = (updatedFields: Partial<User>) => {
+        if (!user) return;
+        const updatedUser = { ...user, ...updatedFields };
+        setUser(updatedUser);
+        updateCurrentUser(updatedUser);
+        updateUser(updatedUser);
+    };
 
     return (
         <main className="container mx-auto p-4">
@@ -502,7 +549,10 @@ const App: React.FC = () => {
                   <Logo className="h-24 w-auto"/>
                   {user && (
                       <div className="flex flex-col sm:flex-row items-center gap-4">
-                          <span className="text-gray-600 text-center sm:text-right">Welcome, {user.email} ({user.subscriptionTier})</span>
+                          <div className="text-center sm:text-right">
+                            <span className="text-gray-600">Welcome, {user.email} ({user.subscriptionTier})</span>
+                            <button onClick={() => setView('profile')} className="font-semibold text-blue-600 hover:underline ml-2">(Profile)</button>
+                          </div>
                           <div className="flex gap-4">
                               {user.role !== 'USER' && <button onClick={() => setView('admin')} className="font-semibold text-indigo-600 hover:underline">Admin Panel</button>}
                               <button onClick={handleLogout} className="font-semibold text-blue-600 hover:underline">Logout</button>
@@ -614,6 +664,16 @@ const App: React.FC = () => {
                             history={user.history} 
                             onGoHome={goHome}
                             onStartWeaknessQuiz={handleStartWeaknessQuiz}
+                        />
+                    )}
+
+                    {view === 'profile' && user && (
+                        <UserProfile
+                            user={user}
+                            onGoHome={goHome}
+                            onUpdateUser={handleUpdateUser}
+                            onViewDashboard={() => setView('dashboard')}
+                            onManageSubscription={() => setView('paywall')}
                         />
                     )}
 
