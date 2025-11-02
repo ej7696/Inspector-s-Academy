@@ -9,14 +9,18 @@ import Paywall from './components/Paywall';
 import AdminDashboard from './components/AdminDashboard';
 import ProgressBar from './components/ProgressBar';
 import ExamModeSelector from './components/ExamModeSelector';
-import { Question, QuizResult, User, UserAnswer, SubscriptionTier } from './types';
+import InstructionsModal from './components/InstructionsModal';
+import { Question, QuizResult, User, UserAnswer, SubscriptionTier, InProgressQuizState } from './types';
 import { examSourceData } from './services/examData';
 import { getCurrentUser, logout as authLogout, updateCurrentUser } from './services/authService';
 import { updateUser } from './services/userData';
 
+type View = 'login' | 'home' | 'exam_mode_selection' | 'instructions' | 'quiz' | 'score' | 'dashboard' | 'paywall' | 'admin' | 'intermission';
+export type QuizSettings = { examName: string, numQuestions: number, isTimed: boolean, examMode: 'open' | 'closed' | 'simulation', topics?: string };
+
 const App: React.FC = () => {
     const [user, setUser] = useState<User | null>(null);
-    const [view, setView] = useState<'login' | 'home' | 'exam_mode_selection' | 'quiz' | 'score' | 'dashboard' | 'paywall' | 'admin' | 'intermission'>('login');
+    const [view, setView] = useState<View>('login');
     const [questions, setQuestions] = useState<Question[]>([]);
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
     const [userAnswers, setUserAnswers] = useState<(string | null)[]>([]);
@@ -24,7 +28,7 @@ const App: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [loadingMessage, setLoadingMessage] = useState('Checking session...');
     const [error, setError] = useState('');
-    const [quizSettings, setQuizSettings] = useState<{ examName: string, numQuestions: number, isTimed: boolean, examMode: 'open' | 'closed' | 'simulation', topics?: string } | null>(null);
+    const [quizSettings, setQuizSettings] = useState<QuizSettings | null>(null);
     
     const [simulationPhase, setSimulationPhase] = useState<'closed_book' | 'open_book' | null>(null);
     const [closedBookResults, setClosedBookResults] = useState<{ questions: Question[], userAnswers: (string|null)[] } | null>(null);
@@ -32,6 +36,10 @@ const App: React.FC = () => {
     const timerRef = useRef<number | null>(null);
     const [followUpAnswer, setFollowUpAnswer] = useState<string>('');
     const [isFollowUpLoading, setIsFollowUpLoading] = useState<boolean>(false);
+
+    const quizStateForSave = {
+        quizSettings, questions, currentQuestionIndex, userAnswers, timeLeft, simulationPhase, closedBookResults
+    };
 
     useEffect(() => {
         const currentUser = getCurrentUser();
@@ -42,6 +50,17 @@ const App: React.FC = () => {
         setIsLoading(false);
         setLoadingMessage('');
     }, []);
+
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (view === 'quiz' && questions.length > 0) {
+                saveQuizProgress();
+            }
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [view, user, quizStateForSave]);
+
 
     useEffect(() => {
       if (timerRef.current) {
@@ -64,12 +83,31 @@ const App: React.FC = () => {
       };
     }, [timeLeft]);
 
+    const saveQuizProgress = () => {
+        if (view !== 'quiz' || !user || questions.length === 0) return;
+
+        const inProgressQuiz: InProgressQuizState = {
+            quizSettings: quizSettings!,
+            questions,
+            currentQuestionIndex,
+            userAnswers,
+            timeLeft,
+            simulationPhase,
+            closedBookResults,
+        };
+        const updatedUser = { ...user, inProgressQuiz };
+        setUser(updatedUser);
+        updateCurrentUser(updatedUser);
+        updateUser(updatedUser);
+    };
+
     const handleLoginSuccess = (loggedInUser: User) => {
         setUser(loggedInUser);
         setView('home');
     };
 
     const handleLogout = () => {
+        if (view === 'quiz') saveQuizProgress();
         authLogout();
         setUser(null);
         setView('login');
@@ -77,7 +115,13 @@ const App: React.FC = () => {
     
     const handleUpgradeSuccess = (tier: SubscriptionTier) => {
         if(user) {
-            const updatedUser = { ...user, subscriptionTier: tier };
+            const FOUR_MONTHS_IN_MS = 120 * 24 * 60 * 60 * 1000;
+            const updatedUser = { 
+                ...user, 
+                subscriptionTier: tier,
+                subscriptionExpiresAt: Date.now() + FOUR_MONTHS_IN_MS,
+                unlockedExams: [], // Reset unlocked exams on new subscription
+            };
             setUser(updatedUser);
             updateCurrentUser(updatedUser);
             updateUser(updatedUser);
@@ -85,46 +129,55 @@ const App: React.FC = () => {
         }
     }
 
-    const handleUnlockExam = (examName: string) => {
-        if (!user || user.subscriptionTier === 'Cadet') return;
+    const initiateQuizFlow = (examName: string, numQuestions: number, isTimed: boolean, topics?: string) => {
+        if (!user) return;
 
-        const maxUnlocks = user.subscriptionTier === 'Professional' ? 1 : 2;
-        if (user.unlockedExams.length >= maxUnlocks) {
-            alert("You have used all your available exam slots. Please upgrade to unlock more.");
-            return;
-        }
+        const settings: QuizSettings = { examName, numQuestions, isTimed, examMode: 'open', topics };
 
-        const confirmUnlock = window.confirm(`You have ${maxUnlocks - user.unlockedExams.length} exam slots available. Are you sure you want to use one to unlock "${examName}"? This choice is permanent.`);
-        
-        if (confirmUnlock) {
-            const updatedUser = { ...user, unlockedExams: [...user.unlockedExams, examName] };
-            setUser(updatedUser);
-            updateCurrentUser(updatedUser);
-            updateUser(updatedUser);
+        const proceedToQuiz = () => {
+            setQuizSettings(settings);
+            if (user.subscriptionTier === 'Cadet') {
+                setView('instructions');
+            } else {
+                setView('exam_mode_selection');
+            }
+        };
+
+        const isPaidUser = user.subscriptionTier !== 'Cadet';
+        const isUnlocked = user.unlockedExams.includes(examName);
+
+        if (isPaidUser && !isUnlocked) {
+            const maxUnlocks = user.subscriptionTier === 'Professional' ? 1 : 2;
+            if (user.unlockedExams.length >= maxUnlocks) {
+                alert("You have no exam slots available. Upgrade your plan to unlock more exams.");
+                setView('paywall');
+                return;
+            }
+
+            const confirmUnlock = window.confirm(`You have ${maxUnlocks - user.unlockedExams.length} exam slot(s) available. Are you sure you want to use one to unlock '${examName}'? This choice is permanent for your subscription period.`);
+            
+            if (confirmUnlock) {
+                const updatedUser = { ...user, unlockedExams: [...user.unlockedExams, examName] };
+                setUser(updatedUser);
+                updateCurrentUser(updatedUser);
+                updateUser(updatedUser);
+                proceedToQuiz();
+            }
+        } else {
+            proceedToQuiz();
         }
     };
 
-    const initiateQuizFlow = (examName: string, numQuestions: number, isTimed: boolean) => {
-        if (user && user.subscriptionTier !== 'Cadet' && !user.unlockedExams.includes(examName)) {
-            handleUnlockExam(examName);
-            return; 
+    const handleModeSelected = (mode: 'open' | 'closed' | 'simulation') => {
+        if (quizSettings) {
+            setQuizSettings(prev => ({...prev!, examMode: mode}));
+            setView('instructions');
         }
+    }
 
-        if (user?.subscriptionTier === 'Cadet' && numQuestions > 5) {
-             setView('paywall');
-             return;
-        }
-
-        // FIX: Add a placeholder examMode to satisfy the type. It will be overwritten by the user's selection later.
-        setQuizSettings({ examName, numQuestions, isTimed, examMode: 'open' });
-        setView('exam_mode_selection');
-    };
-
-    const startQuiz = async (examMode: 'open' | 'closed' | 'simulation') => {
+    const startQuiz = async () => {
         if (!quizSettings) return;
-
-        // FIX: Persist the selected examMode in state for features like 'restart quiz'.
-        setQuizSettings(prev => ({...prev!, examMode}));
+        const { examMode } = quizSettings;
 
         setError('');
         setIsLoading(true);
@@ -210,12 +263,11 @@ const App: React.FC = () => {
     };
     
     const handleStartWeaknessQuiz = (topics: string) => {
-        const settings = {
+        const settings: QuizSettings = {
             examName: "Targeted Practice",
             numQuestions: 10,
             isTimed: false,
             topics: topics,
-            // FIX: Add a placeholder examMode to satisfy the type.
             examMode: 'open' as const
         };
         setQuizSettings(settings);
@@ -229,6 +281,12 @@ const App: React.FC = () => {
     };
 
     const handleNextQuestion = () => {
+        // Implement the paywall for free users after the 5th question
+        if (user?.subscriptionTier === 'Cadet' && currentQuestionIndex === 4) {
+            setView('paywall');
+            return;
+        }
+
         if (currentQuestionIndex < questions.length - 1) {
             setCurrentQuestionIndex(currentQuestionIndex + 1);
             setFollowUpAnswer('');
@@ -285,7 +343,11 @@ const App: React.FC = () => {
         setQuizResult(result);
         
         if (user && user.subscriptionTier !== 'Cadet') {
-            const updatedUser = { ...user, history: [...user.history, result] };
+            const updatedUser = { 
+                ...user, 
+                history: [...user.history, result],
+                inProgressQuiz: null // Clear saved progress on finish
+            };
             setUser(updatedUser);
             updateCurrentUser(updatedUser);
             updateUser(updatedUser);
@@ -297,25 +359,60 @@ const App: React.FC = () => {
     };
 
     const handleStartOpenBookPhase = () => {
-        if (!quizSettings) return;
-        const numQs = quizSettings.numQuestions - Math.floor(quizSettings.numQuestions / 2);
+        if (!quizSettings || !closedBookResults) return;
+        const numOpenBookQs = quizSettings.numQuestions - closedBookResults.questions.length;
         
-        const openBookSettings = {
+        const openBookSettings: QuizSettings = {
             ...quizSettings,
-            numQuestions: numQs,
+            numQuestions: numOpenBookQs,
         };
         setQuizSettings(openBookSettings);
-        startQuiz('open');
         setSimulationPhase('open_book');
+        startQuiz();
     };
+
+    const handleResumeQuiz = () => {
+        if (user && user.inProgressQuiz) {
+            const {
+                quizSettings: savedSettings,
+                questions: savedQuestions,
+                currentQuestionIndex: savedIndex,
+                userAnswers: savedAnswers,
+                timeLeft: savedTime,
+                simulationPhase: savedPhase,
+                closedBookResults: savedResults,
+            } = user.inProgressQuiz;
+
+            setQuizSettings(savedSettings);
+            setQuestions(savedQuestions);
+            setCurrentQuestionIndex(savedIndex);
+            setUserAnswers(savedAnswers);
+            setTimeLeft(savedTime);
+            setSimulationPhase(savedPhase);
+            setClosedBookResults(savedResults);
+            
+            setView('quiz');
+        }
+    };
+    
+    const handleAbandonQuiz = () => {
+        if (user) {
+            const updatedUser = { ...user, inProgressQuiz: null };
+            setUser(updatedUser);
+            updateCurrentUser(updatedUser);
+            updateUser(updatedUser);
+        }
+    };
+
 
     const restartQuiz = () => {
         if (quizSettings) {
-            startQuiz(quizSettings.examMode);
+            startQuiz();
         }
     };
 
     const goHome = () => {
+        if(view === 'quiz') saveQuizProgress();
         setView('home');
         setQuizResult(null);
         setQuestions([]);
@@ -354,7 +451,7 @@ const App: React.FC = () => {
         }
     };
 
-    if (isLoading) {
+    if (isLoading && view !== 'quiz') {
         return <div className="min-h-screen flex items-center justify-center"><div className="text-xl font-semibold">{loadingMessage}</div></div>;
     }
     
@@ -395,11 +492,24 @@ const App: React.FC = () => {
             {renderHeader()}
             <main>
                 {view === 'login' && <Login onLoginSuccess={handleLoginSuccess} />}
-                {/* FIX: Pass the onUnlockExam prop to HomePage */}
-                {view === 'home' && user && <HomePage user={user} onStartQuiz={initiateQuizFlow} onViewDashboard={() => setView('dashboard')} onUpgrade={() => setView('paywall')} onUnlockExam={handleUnlockExam} />}
-                {view === 'exam_mode_selection' && quizSettings && <ExamModeSelector examName={quizSettings.examName} onSelectMode={startQuiz} onGoHome={goHome}/>}
-                {view === 'quiz' && questions.length > 0 && (
-                    <div className="max-w-4xl mx-auto p-4 md:p-6">
+                {view === 'home' && user && <HomePage user={user} onStartQuiz={initiateQuizFlow} onViewDashboard={() => setView('dashboard')} onUpgrade={() => setView('paywall')} onResumeQuiz={handleResumeQuiz} onAbandonQuiz={handleAbandonQuiz} />}
+                {view === 'exam_mode_selection' && quizSettings && <ExamModeSelector examName={quizSettings.examName} onSelectMode={handleModeSelected} onGoHome={goHome}/>}
+                {view === 'instructions' && quizSettings && (
+                    <InstructionsModal
+                        examName={quizSettings.examName}
+                        bodyOfKnowledge={examSourceData[quizSettings.examName]?.bodyOfKnowledge || 'No specific instructions available.'}
+                        onStart={startQuiz}
+                        onCancel={() => user?.subscriptionTier === 'Cadet' ? goHome() : setView('exam_mode_selection')}
+                    />
+                )}
+                {view === 'quiz' && isLoading && (
+                     <div className="min-h-screen flex flex-col items-center justify-center">
+                        <div className="text-xl font-semibold mb-4">{loadingMessage}</div>
+                        <div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-blue-600"></div>
+                    </div>
+                )}
+                {view === 'quiz' && !isLoading && questions.length > 0 && (
+                    <div className="max-w-4xl mx-auto py-8 px-4">
                         <QuestionCard
                             questionNum={currentQuestionIndex + 1 + (closedBookResults?.questions.length || 0)}
                             totalQuestions={quizSettings?.numQuestions || 0}
@@ -418,24 +528,23 @@ const App: React.FC = () => {
                 )}
                 {view === 'intermission' && (
                     <div className="max-w-2xl mx-auto my-10 p-8 text-center bg-white rounded-lg shadow-xl">
-                        <h2 className="text-2xl font-bold text-gray-800 mb-4">Closed-Book Session Complete</h2>
-                        <p className="text-gray-600 mb-6">Take a moment to prepare. When you are ready, you may begin the timed, open-book portion of the exam.</p>
+                        <h1 className="text-2xl font-bold text-gray-800 mb-4">Closed Book Session Complete</h1>
+                        <p className="text-gray-600 mb-6">Take a moment to prepare for the timed open book session. You will be tested on your ability to navigate the code books.</p>
                         <button onClick={handleStartOpenBookPhase} className="bg-indigo-600 text-white px-8 py-3 rounded-lg font-semibold text-lg hover:bg-indigo-700 transition-colors">
-                            Start Open-Book Session
+                            Start Open Book Session
                         </button>
                     </div>
                 )}
                 {view === 'score' && quizResult && <ScoreScreen result={quizResult} onRestart={restartQuiz} onGoHome={goHome} isPro={user?.subscriptionTier !== 'Cadet'} onViewDashboard={() => setView('dashboard')} />}
                 {view === 'dashboard' && user && <Dashboard history={user.history} onGoHome={goHome} onStartWeaknessQuiz={handleStartWeaknessQuiz} />}
-                {view === 'paywall' && <Paywall onUpgrade={handleUpgradeSuccess} onCancel={() => setView('home')} />}
-                {view === 'admin' && user && (user.role === 'ADMIN' || user.role === 'SUB_ADMIN') && <AdminDashboard currentUser={user} onGoHome={() => setView('home')} />}
-                {isLoading && !error && (
-                    <div className="min-h-screen flex flex-col items-center justify-center">
-                        <div className="text-xl font-semibold mb-4">{loadingMessage}</div>
-                        <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                {view === 'admin' && user && <AdminDashboard currentUser={user} onGoHome={goHome} />}
+                {view === 'paywall' && <Paywall onUpgrade={handleUpgradeSuccess} onCancel={goHome} />}
+                 {error && (
+                    <div className="fixed bottom-4 right-4 bg-red-500 text-white p-4 rounded-lg shadow-lg">
+                        <p className="font-bold">Error</p>
+                        <p>{error}</p>
                     </div>
                 )}
-                {error && <div className="text-center text-red-500 p-4">{error}</div>}
             </main>
         </div>
     );

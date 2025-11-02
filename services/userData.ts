@@ -28,6 +28,7 @@ const users: User[] = [
         subscriptionTier: 'Professional',
         unlockedExams: ["API 510 - Pressure Vessel Inspector"],
         history: [],
+        subscriptionExpiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000, // Expires in 30 days for demo
     },
     {
         id: 4,
@@ -46,6 +47,7 @@ const users: User[] = [
         subscriptionTier: 'Specialist',
         unlockedExams: ["API 570 - Piping Inspector", "API 653 - Aboveground Storage Tank Inspector"],
         history: [],
+        subscriptionExpiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000, // Expires in 30 days for demo
     },
 ];
 

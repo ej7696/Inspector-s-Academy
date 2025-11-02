@@ -1,3 +1,5 @@
+import { QuizSettings } from "./App";
+
 export interface UserAnswer {
   question: string;
   answer: string;
@@ -33,6 +35,16 @@ export interface Question {
 export type UserRole = 'USER' | 'SUB_ADMIN' | 'ADMIN';
 export type SubscriptionTier = 'Cadet' | 'Professional' | 'Specialist';
 
+export interface InProgressQuizState {
+  quizSettings: QuizSettings;
+  questions: Question[];
+  currentQuestionIndex: number;
+  userAnswers: (string | null)[];
+  timeLeft: number | null;
+  simulationPhase: 'closed_book' | 'open_book' | null;
+  closedBookResults: { questions: Question[], userAnswers: (string|null)[] } | null;
+}
+
 export interface User {
   id: number;
   email: string;
@@ -41,4 +53,6 @@ export interface User {
   subscriptionTier: SubscriptionTier;
   unlockedExams: string[];
   history: QuizResult[];
+  subscriptionExpiresAt?: number;
+  inProgressQuiz?: InProgressQuizState | null;
 }

@@ -51,7 +51,7 @@ const Paywall: React.FC<Props> = ({ onUpgrade, onCancel }) => {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-      <div className="bg-white p-8 rounded-2xl shadow-xl max-w-4xl w-full transform transition-all animate-fade-in-up">
+      <div className="bg-white p-6 md:p-8 rounded-2xl shadow-xl w-full max-w-md md:max-w-4xl max-h-[90vh] overflow-y-auto transform transition-all animate-fade-in-up">
         <h2 className="text-3xl font-bold text-gray-800 mb-3 text-center">Choose Your Plan</h2>
         <p className="text-gray-600 mb-8 text-center">
           Unlock your full potential and gain access to our powerful study tools.

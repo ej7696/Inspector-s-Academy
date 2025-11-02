@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 
 interface Props {
     user: User;
-    onStartQuiz: (examName: string, numQuestions: number, isTimed: boolean) => void;
+    onStartQuiz: (examName: string, numQuestions: number, isTimed: boolean, topics?: string) => void;
     onViewDashboard: () => void;
     onUpgrade: () => void;
-    onUnlockExam: (examName: string) => void;
+    onResumeQuiz: () => void;
+    onAbandonQuiz: () => void;
 }
 
 const allExams: { [key: string]: string[] } = {
@@ -27,60 +28,106 @@ const allExams: { [key: string]: string[] } = {
     ]
 };
 
-const HomePage: React.FC<Props> = ({ user, onStartQuiz, onViewDashboard, onUpgrade, onUnlockExam }) => {
-    const [selectedExam, setSelectedExam] = useState<string | null>("API 653 - Aboveground Storage Tank Inspector");
+const HomePage: React.FC<Props> = ({ user, onStartQuiz, onViewDashboard, onUpgrade, onResumeQuiz, onAbandonQuiz }) => {
+    const [selectedExam, setSelectedExam] = useState<string | null>(null);
     const [numQuestions, setNumQuestions] = useState(10);
     const [isTimedMode, setIsTimedMode] = useState(false);
+    const [customTopics, setCustomTopics] = useState('');
     const [error, setError] = useState('');
+    
+    const isPaidUser = user.subscriptionTier === 'Professional' || user.subscriptionTier === 'Specialist';
+    const [quizOptionsEnabled, setQuizOptionsEnabled] = useState(!isPaidUser);
 
-    const handleStart = () => {
+    useEffect(() => {
+        if (!isPaidUser) {
+            setQuizOptionsEnabled(true);
+        } else {
+            const isUnlockedAndSelected = selectedExam ? user.unlockedExams.includes(selectedExam) : false;
+            setQuizOptionsEnabled(isUnlockedAndSelected);
+        }
+    }, [selectedExam, user.unlockedExams, isPaidUser]);
+
+    const handleActionClick = () => {
         if (!selectedExam) {
             setError('Please select an exam to begin.');
             return;
         }
-        
-        if (user.subscriptionTier !== 'Cadet' && !isExamUnlocked(selectedExam)) {
-            onUnlockExam(selectedExam);
-            return;
-        }
-
         setError('');
-        onStartQuiz(selectedExam, numQuestions, isTimedMode);
+        onStartQuiz(selectedExam, numQuestions, isTimedMode, customTopics.trim());
     };
 
-    const isExamUnlocked = (examName: string) => {
-        if(user.role === 'ADMIN') return true;
-        if(user.subscriptionTier === 'Cadet') return false;
-        return user.unlockedExams.includes(examName);
-    }
+    const handleExamClick = (exam: string) => {
+        const isCurrentlySelected = selectedExam === exam;
+        const isUnlocked = user.unlockedExams.includes(exam);
+        const isPaid = user.subscriptionTier !== 'Cadet';
+
+        if (isPaid && !isUnlocked) {
+            // If a paid user clicks a locked exam, always trigger the unlock/start flow.
+             onStartQuiz(exam, numQuestions, isTimedMode, customTopics.trim());
+        } else {
+             // If free user, or exam is already unlocked, just select it.
+            setSelectedExam(isCurrentlySelected ? null : exam);
+        }
+    };
     
+    const maxUnlocks = user.subscriptionTier === 'Professional' ? 1 : (user.subscriptionTier === 'Specialist' ? 2 : 0);
+    const usedSlots = user.unlockedExams.length;
+    const slotsAvailable = usedSlots < maxUnlocks;
     const maxQuestions = user.subscriptionTier === 'Cadet' ? 10 : 120;
 
-    const getButtonText = () => {
-        if (!selectedExam) return "Generate & Start Quiz";
-        if (user.subscriptionTier === 'Cadet') return "Start Free Preview";
-        if (isExamUnlocked(selectedExam)) return "Generate & Start Quiz";
-        
-        const maxUnlocks = user.subscriptionTier === 'Professional' ? 1 : 2;
-        if (user.unlockedExams.length < maxUnlocks) {
-            return "Unlock & Start Quiz";
-        }
-        return "Upgrade to Unlock";
-    }
-
-    const handleStartClick = () => {
+    const getButtonProps = () => {
         if (!selectedExam) {
-            setError('Please select an exam to begin.');
-            return;
+            return { text: 'Select an Exam', disabled: true };
         }
+        if (user.subscriptionTier === 'Cadet') {
+            return { text: 'Start Free Preview', disabled: false };
+        }
+    
+        const isUnlocked = user.unlockedExams.includes(selectedExam);
+    
+        if (isUnlocked) {
+            return { text: 'Start Quiz', disabled: false };
+        }
+        
+        // For locked exams, the primary action is clicking the list item.
+        // The main button remains disabled.
+        return { text: 'Select an Exam to Unlock', disabled: true };
+    };
+    
+    const buttonProps = getButtonProps();
+    const areAdvancedOptionsDisabled = user.subscriptionTier === 'Cadet' || (isPaidUser && !quizOptionsEnabled);
 
-        const maxUnlocks = user.subscriptionTier === 'Professional' ? 1 : 2;
-        if (user.subscriptionTier !== 'Cadet' && !isExamUnlocked(selectedExam) && user.unlockedExams.length >= maxUnlocks) {
-            onUpgrade(); // Go to paywall if no slots left
-        } else {
-            handleStart();
-        }
+    if (user.inProgressQuiz) {
+        return (
+            <div className="max-w-2xl mx-auto py-10 px-4 text-center">
+                <div className="bg-white p-8 rounded-lg shadow-xl border-t-4 border-blue-500">
+                    <h2 className="text-2xl font-bold text-gray-800 mb-2">Resume Your Session</h2>
+                    <p className="text-gray-600 mb-6">
+                        You have an in-progress exam for: <br />
+                        <strong className="text-xl text-gray-800 mt-1 block">{user.inProgressQuiz.quizSettings.examName}</strong>
+                    </p>
+                    <p className="text-sm text-gray-500 mb-6">
+                        {user.inProgressQuiz.currentQuestionIndex + 1} / {user.inProgressQuiz.questions.length} questions answered.
+                    </p>
+                    <div className="flex flex-col sm:flex-row justify-center gap-4">
+                        <button
+                            onClick={onResumeQuiz}
+                            className="bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold text-lg hover:bg-blue-700 transition-colors"
+                        >
+                            Resume Exam
+                        </button>
+                        <button
+                            onClick={onAbandonQuiz}
+                            className="bg-red-100 text-red-700 px-6 py-3 rounded-lg font-semibold text-lg hover:bg-red-200 transition-colors"
+                        >
+                            Abandon & Start New
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
     }
+
 
     return (
         <div className="max-w-4xl mx-auto py-8 px-4">
@@ -96,6 +143,13 @@ const HomePage: React.FC<Props> = ({ user, onStartQuiz, onViewDashboard, onUpgra
                     </div>
                 </div>
             )}
+
+            {isPaidUser && (
+                <div className="bg-blue-50 border-l-4 border-blue-400 text-blue-800 p-4 rounded-md shadow-sm mb-6">
+                    <p className="font-bold">Subscription Status: {user.subscriptionTier}</p>
+                    <p className="text-sm">You have unlocked <span className="font-bold">{usedSlots}</span> of <span className="font-bold">{maxUnlocks}</span> available exam slots.</p>
+                </div>
+            )}
            
             <div className="bg-white p-6 rounded-lg shadow-lg">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -106,21 +160,39 @@ const HomePage: React.FC<Props> = ({ user, onStartQuiz, onViewDashboard, onUpgra
                                 <div key={category}>
                                     <h3 className="font-semibold text-gray-600 mt-3 mb-2">{category}</h3>
                                     <div className="space-y-2">
-                                        {exams.map(exam => (
-                                            <button 
-                                                key={exam}
-                                                onClick={() => setSelectedExam(exam)}
-                                                className={`w-full text-left p-3 rounded-lg border-2 transition-all duration-200 flex justify-between items-center ${selectedExam === exam ? 'bg-blue-100 border-blue-500 font-semibold' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'}`}
-                                                aria-pressed={selectedExam === exam}
-                                            >
-                                                <span>{exam}</span>
-                                                {user.subscriptionTier !== 'Cadet' && (
-                                                    isExamUnlocked(exam) ? 
-                                                    <span className="text-xs text-green-600 font-bold">Unlocked</span> :
-                                                    <span className="text-xs text-gray-500 font-bold">Locked</span>
-                                                )}
-                                            </button>
-                                        ))}
+                                        {exams.map(exam => {
+                                            const isUnlocked = user.unlockedExams.includes(exam);
+                                            const isLockedNoSlots = isPaidUser && !isUnlocked && !slotsAvailable;
+                                            
+                                            return (
+                                                <button 
+                                                    key={exam}
+                                                    onClick={() => handleExamClick(exam)}
+                                                    className={`w-full text-left p-3 rounded-lg border-2 transition-all duration-200 flex justify-between items-center ${
+                                                        selectedExam === exam ? 'bg-blue-100 border-blue-500 font-semibold' : 'bg-gray-50 border-gray-200'
+                                                    } ${
+                                                        isLockedNoSlots ? 'opacity-50 cursor-not-allowed bg-gray-100' : 'hover:bg-gray-100'
+                                                    }`}
+                                                    aria-pressed={selectedExam === exam}
+                                                    disabled={isLockedNoSlots}
+                                                >
+                                                    <span>{exam}</span>
+                                                    {isPaidUser && (
+                                                        isUnlocked ? (
+                                                            <span className="flex items-center text-xs text-green-600 font-bold bg-green-100 px-2 py-1 rounded-full">
+                                                                <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                                                                Unlocked
+                                                            </span>
+                                                        ) : (
+                                                            <span className="flex items-center text-xs text-blue-600 font-bold bg-blue-100 px-2 py-1 rounded-full">
+                                                                <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm5-3a3 3 0 00-3 3v2h6V7a3 3 0 00-3-3z" clipRule="evenodd" /></svg>
+                                                                Click to Unlock
+                                                            </span>
+                                                        )
+                                                    )}
+                                                </button>
+                                            )
+                                        })}
                                     </div>
                                 </div>
                             ))}
@@ -141,14 +213,30 @@ const HomePage: React.FC<Props> = ({ user, onStartQuiz, onViewDashboard, onUpgra
                                     max={maxQuestions}
                                     value={numQuestions}
                                     onChange={(e) => setNumQuestions(parseInt(e.target.value, 10))}
-                                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                    disabled={isPaidUser && !quizOptionsEnabled}
                                 />
                                 {user.subscriptionTier === 'Cadet' && <p className="text-xs text-gray-500 mt-1">Upgrade for up to 120 questions.</p>}
                             </div>
                             <div className="mt-4">
-                               <label className={`flex items-center ${user.subscriptionTier === 'Cadet' ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
+                                <label htmlFor="customTopics" className="block text-sm font-medium text-gray-700 mb-1">
+                                    Focus on Specific Topics (Optional)
+                                </label>
+                                <input
+                                    type="text"
+                                    id="customTopics"
+                                    value={customTopics}
+                                    onChange={(e) => setCustomTopics(e.target.value)}
+                                    placeholder="e.g., welding, NDE, corrosion"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    disabled={areAdvancedOptionsDisabled}
+                                />
+                                {user.subscriptionTier === 'Cadet' && <p className="text-xs text-gray-500 mt-1">Upgrade to use targeted topic generation.</p>}
+                            </div>
+                            <div className="mt-4">
+                               <label className={`flex items-center ${areAdvancedOptionsDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
                                     <div className="relative">
-                                        <input type="checkbox" className="sr-only" checked={isTimedMode} onChange={() => user.subscriptionTier !== 'Cadet' && setIsTimedMode(!isTimedMode)} disabled={user.subscriptionTier === 'Cadet'} />
+                                        <input type="checkbox" className="sr-only" checked={isTimedMode} onChange={() => !areAdvancedOptionsDisabled && setIsTimedMode(!isTimedMode)} disabled={areAdvancedOptionsDisabled} />
                                         <div className="block bg-gray-200 w-14 h-8 rounded-full"></div>
                                         <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${isTimedMode ? 'transform translate-x-full bg-blue-500' : ''}`}></div>
                                     </div>
@@ -162,11 +250,11 @@ const HomePage: React.FC<Props> = ({ user, onStartQuiz, onViewDashboard, onUpgra
                         <div className="space-y-3 pt-4 border-t">
                             {error && <p className="text-red-500 text-sm text-center">{error}</p>}
                             <button
-                                onClick={handleStartClick}
-                                className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold text-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400"
-                                disabled={!selectedExam}
+                                onClick={handleActionClick}
+                                className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold text-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                                disabled={buttonProps.disabled}
                             >
-                                {getButtonText()}
+                                {buttonProps.text}
                             </button>
                              {user.subscriptionTier !== 'Cadet' && (
                                 <button

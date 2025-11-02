@@ -119,16 +119,16 @@ const QuestionCard: React.FC<Props> = ({
 
             {(!isSimulationClosedBook && (question.explanation || question.reference)) && (
                 <div className="p-4 rounded-lg bg-gray-50 border space-y-4">
-                    {question.reference && <p><strong className="font-semibold text-gray-700">Reference:</strong> {question.reference}</p>}
-                    
                     <button onClick={() => setShowExplanation(!showExplanation)} className="font-semibold text-blue-600 hover:underline flex items-center">
-                        Quick Rationale
+                        View Explanation & Reference
                         <svg className={`w-5 h-5 ml-1 transition-transform ${showExplanation ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                     </button>
 
                     {showExplanation && (
-                        <div className="space-y-4 pt-2 border-t">
-                            {question.explanation && <p>{question.explanation}</p>}
+                        <div className="space-y-4 pt-4 border-t">
+                            {question.reference && <p><strong className="font-semibold text-gray-700">Reference:</strong> {question.reference}</p>}
+                            {question.explanation && <p><strong className="font-semibold text-gray-700">Rationale:</strong> {question.explanation}</p>}
+
                             {isPro && (
                                 <div className="pt-4 border-t border-gray-200">
                                     <h4 className="font-semibold text-gray-700 mb-2">Ask a follow-up question (AI Tutor)</h4>
