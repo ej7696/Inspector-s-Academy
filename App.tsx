@@ -679,7 +679,20 @@ const App: React.FC = () => {
 
                     {view === 'paywall' && <Paywall onUpgrade={handleUpgradeSuccess} onCancel={() => setView('home')} />}
                     
-                    {view === 'admin' && user && <AdminDashboard currentUser={user} onGoHome={goHome} />}
+                    {view === 'admin' && user && (
+                        (user.role === 'ADMIN' || user.role === 'SUB_ADMIN') ? (
+                            <AdminDashboard currentUser={user} onGoHome={goHome} />
+                        ) : (
+                            <HomePage
+                                user={user}
+                                onStartQuiz={initiateQuizFlow}
+                                onViewDashboard={() => setView('dashboard')}
+                                onUpgrade={() => setView('paywall')}
+                                onResumeQuiz={handleResumeQuiz}
+                                onAbandonQuiz={handleAbandonQuiz}
+                            />
+                        )
+                    )}
                 </>
             )}
             

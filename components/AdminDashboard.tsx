@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { User, SubscriptionTier, UserRole } from '../types';
 import { fetchAllUsers, updateUser } from '../services/userData';
+import ConfirmDialog from './ConfirmDialog'; // Import the custom dialog
 
 interface Props {
   currentUser: User;
@@ -65,10 +66,9 @@ const AdminDashboard: React.FC<Props> = ({ currentUser, onGoHome }) => {
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [filter, setFilter] = useState('All Users');
   const [searchTerm, setSearchTerm] = useState('');
+  const [pendingReset, setPendingReset] = useState<User | null>(null);
   
   useEffect(() => {
-    // A sub-admin should not see this page in a real-world scenario,
-    // but for this demo we will allow it, though they cannot edit Admins.
     if (currentUser.role === 'USER') {
       onGoHome();
     } else {
@@ -125,24 +125,23 @@ const AdminDashboard: React.FC<Props> = ({ currentUser, onGoHome }) => {
     }));
   };
 
-  const handleResetPassword = (userId: string) => {
-    const userToReset = allUsers.find(u => u.id === userId);
-    if (!userToReset) return;
+  const confirmPasswordReset = () => {
+    if (!pendingReset) return;
 
-    if (window.confirm(`Are you sure you want to reset the password for ${userToReset.email}?`)) {
-        const newPassword = 'password123'; // Default reset password
-        
-        setAllUsers(prev => prev.map(u => {
-            if (u.id === userId) {
-                const updated = { ...u, password: newPassword };
-                updateUser(updated); // Persist change
-                return updated;
-            }
-            return u;
-        }));
+    const newPassword = 'password123';
+    const userToReset = pendingReset;
 
-        alert(`Password for ${userToReset.email} has been reset to "${newPassword}".`);
-    }
+    setAllUsers(prev => prev.map(u => {
+      if (u.id === userToReset.id) {
+        const updated = { ...u, password: newPassword };
+        updateUser(updated);
+        return updated;
+      }
+      return u;
+    }));
+    
+    alert(`Password for ${userToReset.email} has been reset to "${newPassword}".`);
+    setPendingReset(null);
   };
 
 
@@ -252,7 +251,7 @@ const AdminDashboard: React.FC<Props> = ({ currentUser, onGoHome }) => {
                                          <option value="ADMIN">Admin</option>
                                      </select>
                                      <button 
-                                        onClick={() => handleResetPassword(user.id)}
+                                        onClick={() => setPendingReset(user)}
                                         className="text-xs p-1 border rounded bg-red-100 text-red-700 hover:bg-red-200 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
                                         disabled={!canEdit}
                                     >
@@ -267,6 +266,15 @@ const AdminDashboard: React.FC<Props> = ({ currentUser, onGoHome }) => {
               </table>
           </div>
       </div>
+      {pendingReset && (
+        <ConfirmDialog
+          open={true}
+          title="Reset Password?"
+          message={`Are you sure you want to reset the password for ${pendingReset.email}? This action cannot be undone.`}
+          onConfirm={confirmPasswordReset}
+          onCancel={() => setPendingReset(null)}
+        />
+      )}
     </div>
   );
 };
