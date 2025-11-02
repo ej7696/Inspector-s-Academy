@@ -10,6 +10,7 @@ import AdminDashboard from './components/AdminDashboard';
 import ProgressBar from './components/ProgressBar';
 import ExamModeSelector from './components/ExamModeSelector';
 import InstructionsModal from './components/InstructionsModal';
+import ConfirmDialog from './components/ConfirmDialog';
 import { Question, QuizResult, User, UserAnswer, SubscriptionTier, InProgressQuizState } from './types';
 import { examSourceData } from './services/examData';
 import { getCurrentUser, logout as authLogout, updateCurrentUser } from './services/authService';
@@ -36,6 +37,14 @@ const App: React.FC = () => {
     const timerRef = useRef<number | null>(null);
     const [followUpAnswer, setFollowUpAnswer] = useState<string>('');
     const [isFollowUpLoading, setIsFollowUpLoading] = useState<boolean>(false);
+    
+    const [pendingUnlock, setPendingUnlock] = useState<null | {
+      examName: string;
+      message: string;
+      numQuestions: number;
+      isTimed: boolean;
+      topics?: string;
+    }>(null);
 
     const quizStateForSave = {
         quizSettings, questions, currentQuestionIndex, userAnswers, timeLeft, simulationPhase, closedBookResults
@@ -131,40 +140,36 @@ const App: React.FC = () => {
 
     const initiateQuizFlow = (examName: string, numQuestions: number, isTimed: boolean, topics?: string) => {
         if (!user) return;
-
+    
         const settings: QuizSettings = { examName, numQuestions, isTimed, examMode: 'open', topics };
+        const isPaidUser = user.subscriptionTier !== 'Cadet';
+        const isUnlocked = user.unlockedExams.includes(examName);
+    
+        if (isPaidUser && !isUnlocked) {
+          const maxUnlocks = user.subscriptionTier === 'Professional' ? 1 : 2;
+          if (user.unlockedExams.length >= maxUnlocks) {
+            alert("You have no exam slots available. Upgrade your plan to unlock more exams.");
+            setView('paywall');
+            return;
+          }
 
-        const proceedToQuiz = () => {
+          setPendingUnlock({
+            examName,
+            message: `You have ${maxUnlocks - user.unlockedExams.length} exam slot(s) available. 
+            Do you want to use one to unlock "${examName}"? This choice is permanent for your subscription period.`,
+            numQuestions,
+            isTimed,
+            topics
+          });
+          return;
+        } else {
+            // Handle the standard start flow for free users or already unlocked exams
             setQuizSettings(settings);
             if (user.subscriptionTier === 'Cadet') {
                 setView('instructions');
             } else {
                 setView('exam_mode_selection');
             }
-        };
-
-        const isPaidUser = user.subscriptionTier !== 'Cadet';
-        const isUnlocked = user.unlockedExams.includes(examName);
-
-        if (isPaidUser && !isUnlocked) {
-            const maxUnlocks = user.subscriptionTier === 'Professional' ? 1 : 2;
-            if (user.unlockedExams.length >= maxUnlocks) {
-                alert("You have no exam slots available. Upgrade your plan to unlock more exams.");
-                setView('paywall');
-                return;
-            }
-
-            const confirmUnlock = window.confirm(`You have ${maxUnlocks - user.unlockedExams.length} exam slot(s) available. Are you sure you want to use one to unlock '${examName}'? This choice is permanent for your subscription period.`);
-            
-            if (confirmUnlock) {
-                const updatedUser = { ...user, unlockedExams: [...user.unlockedExams, examName] };
-                setUser(updatedUser);
-                updateCurrentUser(updatedUser);
-                updateUser(updatedUser);
-                proceedToQuiz();
-            }
-        } else {
-            proceedToQuiz();
         }
     };
 
@@ -544,6 +549,26 @@ const App: React.FC = () => {
                         <p className="font-bold">Error</p>
                         <p>{error}</p>
                     </div>
+                )}
+                {pendingUnlock && (
+                  <ConfirmDialog
+                    open={true}
+                    title="Unlock Exam?"
+                    message={pendingUnlock.message}
+                    onCancel={() => setPendingUnlock(null)}
+                    onConfirm={() => {
+                      if (!user) return;
+                      const { examName, numQuestions, isTimed, topics } = pendingUnlock;
+                      const updatedUser = { ...user, unlockedExams: [...user.unlockedExams, examName] };
+                      setUser(updatedUser);
+                      updateCurrentUser(updatedUser);
+                      updateUser(updatedUser);
+      
+                      setPendingUnlock(null);
+                      setQuizSettings({ examName, numQuestions, isTimed, examMode: 'open', topics });
+                      setView('exam_mode_selection');
+                    }}
+                  />
                 )}
             </main>
         </div>
