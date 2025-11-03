@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback } from 'react';
 import api from './services/apiService';
 import { User, QuizSettings, Question, QuizResult, InProgressQuizState, SubscriptionTier } from './types';
@@ -166,11 +167,6 @@ function App() {
                             setInfoDialog(null);
                         }, 
                         style: 'primary' 
-                    },
-                    {
-                        text: 'Upgrade Plan',
-                        onClick: () => { setInfoDialog(null); setAppState('paywall') },
-                        style: 'secondary'
                     },
                     { 
                         text: 'Maybe Later', 
