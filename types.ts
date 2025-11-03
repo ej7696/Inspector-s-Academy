@@ -71,6 +71,7 @@ export interface User {
   permissions?: SubAdminPermissions;
   createdAt: number;
   lastActive: number;
+  isSuspended?: boolean;
 }
 
 export type ActivityEventType = 'login' | 'upgrade' | 'unlock' | 'one_time_unlock' | 'quiz_complete';

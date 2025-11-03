@@ -20,11 +20,11 @@ const initializeData = () => {
     if (!localStorage.getItem(DB_USERS_KEY)) {
         const now = Date.now();
         const initialUsers: User[] = [
-            { id: '1', fullName: 'Admin User', email: 'admin@test.com', phoneNumber: '555-0101', password: 'admin123', role: 'ADMIN', subscriptionTier: 'Specialist', unlockedExams: [], history: [], createdAt: now, lastActive: now, permissions: { canEditUsers: true, canResetPasswords: true } },
-            { id: '2', fullName: 'Sub Admin', email: 'subadmin@test.com', phoneNumber: '555-0102', password: 'subadmin123', role: 'SUB_ADMIN', subscriptionTier: 'Specialist', unlockedExams: [], history: [], createdAt: now, lastActive: now, permissions: { canEditUsers: true, canResetPasswords: false } },
-            { id: '3', fullName: 'Pro User', email: 'pro@test.com', phoneNumber: '555-0103', password: 'pro123', role: 'USER', subscriptionTier: 'Professional', unlockedExams: [], history: [], createdAt: now, lastActive: now },
-            { id: '4', fullName: 'Specialist User', email: 'specialist@test.com', phoneNumber: '555-0104', password: 'specialist123', role: 'USER', subscriptionTier: 'Specialist', unlockedExams: [], history: [], createdAt: now, lastActive: now },
-            { id: '5', fullName: 'Cadet User', email: 'cadet@test.com', phoneNumber: '555-0105', password: 'user123', role: 'USER', subscriptionTier: 'Cadet', unlockedExams: [], history: [], createdAt: now, lastActive: now },
+            { id: '1', fullName: 'Admin User', email: 'admin@test.com', phoneNumber: '555-0101', password: 'admin123', role: 'ADMIN', subscriptionTier: 'Specialist', unlockedExams: [], history: [], createdAt: now, lastActive: now, permissions: { canEditUsers: true, canResetPasswords: true }, isSuspended: false },
+            { id: '2', fullName: 'Sub Admin', email: 'subadmin@test.com', phoneNumber: '555-0102', password: 'subadmin123', role: 'SUB_ADMIN', subscriptionTier: 'Specialist', unlockedExams: [], history: [], createdAt: now, lastActive: now, permissions: { canEditUsers: true, canResetPasswords: false }, isSuspended: false },
+            { id: '3', fullName: 'Pro User', email: 'pro@test.com', phoneNumber: '555-0103', password: 'pro123', role: 'USER', subscriptionTier: 'Professional', unlockedExams: [], history: [], createdAt: now, lastActive: now, isSuspended: false },
+            { id: '4', fullName: 'Specialist User', email: 'specialist@test.com', phoneNumber: '555-0104', password: 'specialist123', role: 'USER', subscriptionTier: 'Specialist', unlockedExams: [], history: [], createdAt: now, lastActive: now, isSuspended: false },
+            { id: '5', fullName: 'Cadet User', email: 'cadet@test.com', phoneNumber: '555-0105', password: 'user123', role: 'USER', subscriptionTier: 'Cadet', unlockedExams: [], history: [], createdAt: now, lastActive: now, isSuspended: false },
         ];
         localStorage.setItem(DB_USERS_KEY, JSON.stringify(initialUsers));
     }
@@ -77,6 +77,10 @@ const api = {
             throw new Error('Invalid email or password.');
         }
         
+        if (user.isSuspended) {
+            throw new Error('This account has been suspended.');
+        }
+
         sessionStorage.setItem(SESSION_KEY, JSON.stringify(user));
         await api.logActivity(user.id, 'login', `User logged in successfully.`);
         
@@ -91,6 +95,18 @@ const api = {
         sessionStorage.removeItem(SESSION_KEY);
     },
 
+    sendPasswordReset: async (email: string): Promise<void> => {
+        await new Promise(res => setTimeout(res, 500));
+        const users: User[] = JSON.parse(localStorage.getItem(DB_USERS_KEY) || '[]');
+        const userExists = users.some(u => u.email.toLowerCase() === email.toLowerCase());
+        if (!userExists) {
+            throw new Error("No account found with that email address.");
+        }
+        // In a real Firebase app, this would trigger a Firebase Auth email. Here we simulate it.
+        console.log(`Password reset email sent to ${email}`);
+        alert(`A password reset link has been sent to ${email}.`);
+    },
+
     checkSession: async (): Promise<User | null> => {
         const userJson = sessionStorage.getItem(SESSION_KEY);
         if (!userJson) return null;
@@ -99,6 +115,12 @@ const api = {
         const sessionUser = JSON.parse(userJson);
         const users: User[] = JSON.parse(localStorage.getItem(DB_USERS_KEY) || '[]');
         const currentUser = users.find(u => u.id === sessionUser.id);
+        
+        if (currentUser && currentUser.isSuspended) {
+            await api.logout();
+            return null;
+        }
+
         return currentUser || null;
     },
 
@@ -146,6 +168,7 @@ const api = {
             role: 'USER',
             createdAt: now,
             lastActive: now,
+            isSuspended: false,
         };
         users.push(user);
         localStorage.setItem(DB_USERS_KEY, JSON.stringify(users));
@@ -281,6 +304,11 @@ const api = {
 
     fetchActivityFeed: async (): Promise<ActivityEvent[]> => {
         return JSON.parse(localStorage.getItem(DB_ACTIVITY_KEY) || '[]');
+    },
+
+    fetchUserActivity: async(userId: string): Promise<ActivityEvent[]> => {
+        const feed: ActivityEvent[] = JSON.parse(localStorage.getItem(DB_ACTIVITY_KEY) || '[]');
+        return feed.filter(event => event.userId === userId);
     },
 
     // --- Content Management (Exams) ---
