@@ -1,1 +1,0 @@
-full contents of components/ProgressRing.tsx

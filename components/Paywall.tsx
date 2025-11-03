@@ -1,12 +1,13 @@
 import React from 'react';
-import { SubscriptionTier } from '../types';
+import { SubscriptionTier, User } from '../types';
 
 interface Props {
+  user: User;
   onUpgrade: (tier: SubscriptionTier) => void;
   onCancel: () => void;
 }
 
-const Paywall: React.FC<Props> = ({ onUpgrade, onCancel }) => {
+const Paywall: React.FC<Props> = ({ user, onUpgrade, onCancel }) => {
 
   const tiers = [
     {
@@ -18,7 +19,7 @@ const Paywall: React.FC<Props> = ({ onUpgrade, onCancel }) => {
         '5 questions per exam',
         'Max 10 questions per quiz'
       ],
-      isCurrent: true,
+      isCurrent: user.subscriptionTier === 'Cadet',
     },
     {
       name: 'Professional',
@@ -32,7 +33,8 @@ const Paywall: React.FC<Props> = ({ onUpgrade, onCancel }) => {
         'All Smart Study Tools'
       ],
       cta: 'Upgrade to Professional',
-      tier: 'Professional' as SubscriptionTier
+      tier: 'Professional' as SubscriptionTier,
+      isCurrent: user.subscriptionTier === 'Professional',
     },
     {
       name: 'Specialist',
@@ -46,8 +48,16 @@ const Paywall: React.FC<Props> = ({ onUpgrade, onCancel }) => {
       cta: 'Upgrade to Specialist',
       tier: 'Specialist' as SubscriptionTier,
       isPopular: true,
+      isCurrent: user.subscriptionTier === 'Specialist',
     }
   ];
+
+  const getContinueText = () => {
+    if (user.subscriptionTier === 'Cadet') {
+      return "Continue with Free Plan";
+    }
+    return `Continue with ${user.subscriptionTier} Plan`;
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
@@ -59,7 +69,7 @@ const Paywall: React.FC<Props> = ({ onUpgrade, onCancel }) => {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {tiers.map((tier) => (
-            <div key={tier.name} className={`rounded-lg p-6 border ${tier.isPopular ? 'border-blue-500 shadow-lg' : 'border-gray-200'}`}>
+            <div key={tier.name} className={`rounded-lg p-6 border ${tier.isPopular ? 'border-blue-500 shadow-lg' : 'border-gray-200'} ${tier.isCurrent ? 'bg-gray-50' : ''}`}>
               <h3 className="text-xl font-bold">{tier.name}</h3>
               <p className="text-sm text-gray-500 h-10">{tier.description}</p>
               <p className="text-3xl font-bold my-4">{tier.price}</p>
@@ -73,7 +83,7 @@ const Paywall: React.FC<Props> = ({ onUpgrade, onCancel }) => {
                   </li>
                 ))}
               </ul>
-              {tier.cta && (
+              {tier.cta && !tier.isCurrent && (
                 <button
                   onClick={() => onUpgrade(tier.tier)}
                   className={`w-full p-3 rounded-lg font-bold text-lg transition-colors ${tier.isPopular ? 'bg-blue-500 text-white hover:bg-blue-600' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
@@ -81,6 +91,11 @@ const Paywall: React.FC<Props> = ({ onUpgrade, onCancel }) => {
                   {tier.cta}
                 </button>
               )}
+               {tier.isCurrent && tier.name !== 'Cadet' && (
+                 <div className="text-center p-3 rounded-lg font-bold text-lg bg-gray-200 text-gray-500">
+                    Current Plan
+                 </div>
+               )}
             </div>
           ))}
         </div>
@@ -89,7 +104,7 @@ const Paywall: React.FC<Props> = ({ onUpgrade, onCancel }) => {
                 className="text-sm text-gray-500 hover:underline"
                 onClick={onCancel}
             >
-                Continue with Free Plan
+                {getContinueText()}
             </button>
         </div>
       </div>

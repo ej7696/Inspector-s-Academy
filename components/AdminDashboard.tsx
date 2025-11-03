@@ -143,11 +143,13 @@ const AdminDashboard: React.FC<{ currentUser: User, onGoHome: () => void }> = ({
   };
 
   const getActivityIcon = (type: ActivityEvent['type']) => {
+    // FIX: Added 'one_time_unlock' to the icons object to satisfy the Record type requirement.
     const icons: Record<ActivityEvent['type'], string> = {
         login: '👤',
         upgrade: '⭐',
         quiz_completion: '✅',
-        exam_unlock: '🔑'
+        exam_unlock: '🔑',
+        one_time_unlock: '💰'
     };
     return icons[type] || '🔔';
   };
