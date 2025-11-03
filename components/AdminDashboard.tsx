@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { User, SubscriptionTier, UserRole, ActivityEvent } from '../types';
 import api from '../services/apiService';
 import ConfirmDialog from './ConfirmDialog';
+import AddUserModal from './AddUserModal'; // Import the new modal
 
 interface Props {
   currentUser: User;
@@ -65,6 +66,7 @@ const AdminDashboard: React.FC<{ currentUser: User, onGoHome: () => void }> = ({
   const [filter, setFilter] = useState('All Users');
   const [searchTerm, setSearchTerm] = useState('');
   const [pendingReset, setPendingReset] = useState<User | null>(null);
+  const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
   
   useEffect(() => {
     const loadData = async () => {
@@ -73,7 +75,6 @@ const AdminDashboard: React.FC<{ currentUser: User, onGoHome: () => void }> = ({
             return;
         }
         try {
-            // No need to set loading to true here to allow for smooth background refresh
             const users = await api.fetchAllUsers();
             const feed = await api.fetchActivityFeed();
             setAllUsers(users);
@@ -85,7 +86,7 @@ const AdminDashboard: React.FC<{ currentUser: User, onGoHome: () => void }> = ({
         }
     }
     loadData();
-    const intervalId = setInterval(loadData, 5000); // Poll for new data every 5 seconds
+    const intervalId = setInterval(loadData, 5000);
     return () => clearInterval(intervalId);
   }, [currentUser, onGoHome]);
 
@@ -117,6 +118,11 @@ const AdminDashboard: React.FC<{ currentUser: User, onGoHome: () => void }> = ({
       }
   };
   
+  const handleUserAdd = async (newUserData: Omit<User, 'id' | 'subscriptionTier' | 'unlockedExams' | 'history' | 'inProgressQuiz' | 'role' | 'createdAt' | 'lastActive'>) => {
+    const newUser = await api.addUser(newUserData);
+    setAllUsers(prevUsers => [...prevUsers, newUser].sort((a, b) => a.email.localeCompare(b.email)));
+  };
+
   const confirmPasswordReset = () => {
       if (!pendingReset) return;
       const newPassword = 'password123';
@@ -143,7 +149,6 @@ const AdminDashboard: React.FC<{ currentUser: User, onGoHome: () => void }> = ({
   };
 
   const getActivityIcon = (type: ActivityEvent['type']) => {
-    // FIX: Added 'one_time_unlock' to the icons object to satisfy the Record type requirement.
     const icons: Record<ActivityEvent['type'], string> = {
         login: '👤',
         upgrade: '⭐',
@@ -205,7 +210,15 @@ const AdminDashboard: React.FC<{ currentUser: User, onGoHome: () => void }> = ({
       </div>
 
       <div className="bg-white p-6 rounded-lg shadow-md">
-        <h2 className="text-2xl font-bold text-gray-800 mb-4">User Management</h2>
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4">
+            <h2 className="text-2xl font-bold text-gray-800">User Management</h2>
+            <button
+                onClick={() => setIsAddUserModalOpen(true)}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors"
+            >
+                + Add New User
+            </button>
+        </div>
         
         <div className="flex flex-col sm:flex-row gap-4 mb-4">
             <input type="text" placeholder="Search by email..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="flex-grow p-2 border rounded-md"/>
@@ -229,7 +242,7 @@ const AdminDashboard: React.FC<{ currentUser: User, onGoHome: () => void }> = ({
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredUsers.map(user => (
                 <tr key={user.id}>
-                  <td className="px-6 py-4 whitespace-nowrap"><div className="text-sm text-gray-900">{user.email}</div></td>
+                  <td className="px-6 py-4 whitespace-nowrap"><div className="text-sm text-gray-900">{user.email}</div><div className="text-xs text-gray-500">{user.fullName}</div></td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <select value={user.subscriptionTier} onChange={e => handleUserUpdate({...user, subscriptionTier: e.target.value as SubscriptionTier})} disabled={!canEdit(user)} className="p-1 border rounded-md text-sm bg-white disabled:bg-gray-100 disabled:border-transparent">
                         <option>Cadet</option><option>Professional</option><option>Specialist</option>
@@ -259,6 +272,11 @@ const AdminDashboard: React.FC<{ currentUser: User, onGoHome: () => void }> = ({
               onCancel={() => setPendingReset(null)}
           />
       )}
+      <AddUserModal 
+        isOpen={isAddUserModalOpen}
+        onClose={() => setIsAddUserModalOpen(false)}
+        onAddUser={handleUserAdd}
+      />
     </div>
   );
 };

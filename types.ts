@@ -1,4 +1,3 @@
-
 // FIX: Defined the QuizSettings interface and removed the circular self-import.
 export interface QuizSettings {
   examName: string;
@@ -58,6 +57,8 @@ export interface InProgressQuizState {
 export interface User {
   id: string;
   email: string;
+  fullName?: string;
+  phoneNumber?: string;
   password: string;
   subscriptionTier: SubscriptionTier;
   subscriptionExpiresAt?: number;

@@ -12,12 +12,12 @@ const getDaysAgo = (days: number) => Date.now() - days * 24 * 60 * 60 * 1000;
 
 // --- Seed Data ---
 const getSeedUsers = (): User[] => [
-    { id: '1', email: 'admin@test.com', password: 'admin123', subscriptionTier: 'Specialist', unlockedExams: ["API 510 - Pressure Vessel Inspector", "CWI - Certified Welding Inspector"], history: [{ id: 'h1', examName: 'API 510 - Pressure Vessel Inspector', score: 85, totalQuestions: 100, percentage: 85, date: getDaysAgo(2), userAnswers: [] }, { id: 'h2', examName: 'CWI - Certified Welding Inspector', score: 92, totalQuestions: 120, percentage: 76.6, date: getDaysAgo(5), userAnswers: [] }], inProgressQuiz: null, role: 'ADMIN', subscriptionExpiresAt: getDaysAgo(-120), createdAt: getDaysAgo(200), lastActive: getDaysAgo(0) },
-    { id: '6', email: 'subadmin@test.com', password: 'subadmin123', subscriptionTier: 'Specialist', unlockedExams: ["API 570 - Piping Inspector"], history: [], inProgressQuiz: null, role: 'SUB_ADMIN', subscriptionExpiresAt: getDaysAgo(-90), createdAt: getDaysAgo(90), lastActive: getDaysAgo(1) },
-    { id: '2', email: 'userpro@test.com', password: 'userpro123', subscriptionTier: 'Professional', unlockedExams: ["API 570 - Piping Inspector"], history: [{ id: 'h3', examName: 'API 570 - Piping Inspector', score: 68, totalQuestions: 100, percentage: 68, date: getDaysAgo(10), userAnswers: [] }], inProgressQuiz: null, role: 'USER', subscriptionExpiresAt: getDaysAgo(-60), createdAt: getDaysAgo(45), lastActive: getDaysAgo(3) },
-    { id: '4', email: 'user@test.com', password: 'user123', subscriptionTier: 'Professional', unlockedExams: [], history: [], inProgressQuiz: null, role: 'USER', subscriptionExpiresAt: getDaysAgo(-15), createdAt: getDaysAgo(10), lastActive: getDaysAgo(10) },
-    { id: '5', email: 'specialist@test.com', password: 'specialist123', subscriptionTier: 'Specialist', unlockedExams: ["API 653 - Aboveground Storage Tank Inspector", "SIFE - Source Inspector Fixed Equipment"], history: [{ id: 'h4', examName: 'API 653 - Aboveground Storage Tank Inspector', score: 105, totalQuestions: 120, percentage: 87.5, date: getDaysAgo(1), userAnswers: [] }], inProgressQuiz: null, role: 'USER', subscriptionExpiresAt: getDaysAgo(-110), createdAt: getDaysAgo(32), lastActive: getDaysAgo(1) },
-    { id: '3', email: 'cadet@test.com', password: 'user123', subscriptionTier: 'Cadet', unlockedExams: [], history: [], inProgressQuiz: null, role: 'USER', createdAt: getDaysAgo(5), lastActive: getDaysAgo(5) },
+    { id: '1', email: 'admin@test.com', fullName: 'Admin User', phoneNumber: '555-0101', password: 'admin123', subscriptionTier: 'Specialist', unlockedExams: ["API 510 - Pressure Vessel Inspector", "CWI - Certified Welding Inspector"], history: [{ id: 'h1', examName: 'API 510 - Pressure Vessel Inspector', score: 85, totalQuestions: 100, percentage: 85, date: getDaysAgo(2), userAnswers: [] }, { id: 'h2', examName: 'CWI - Certified Welding Inspector', score: 92, totalQuestions: 120, percentage: 76.6, date: getDaysAgo(5), userAnswers: [] }], inProgressQuiz: null, role: 'ADMIN', subscriptionExpiresAt: getDaysAgo(-120), createdAt: getDaysAgo(200), lastActive: getDaysAgo(0) },
+    { id: '6', email: 'subadmin@test.com', fullName: 'Sub Admin', phoneNumber: '555-0106', password: 'subadmin123', subscriptionTier: 'Specialist', unlockedExams: ["API 570 - Piping Inspector"], history: [], inProgressQuiz: null, role: 'SUB_ADMIN', subscriptionExpiresAt: getDaysAgo(-90), createdAt: getDaysAgo(90), lastActive: getDaysAgo(1) },
+    { id: '2', email: 'userpro@test.com', fullName: 'Professional User', phoneNumber: '555-0102', password: 'userpro123', subscriptionTier: 'Professional', unlockedExams: ["API 570 - Piping Inspector"], history: [{ id: 'h3', examName: 'API 570 - Piping Inspector', score: 68, totalQuestions: 100, percentage: 68, date: getDaysAgo(10), userAnswers: [] }], inProgressQuiz: null, role: 'USER', subscriptionExpiresAt: getDaysAgo(-60), createdAt: getDaysAgo(45), lastActive: getDaysAgo(3) },
+    { id: '4', email: 'user@test.com', fullName: 'Regular User', phoneNumber: '555-0104', password: 'user123', subscriptionTier: 'Professional', unlockedExams: [], history: [], inProgressQuiz: null, role: 'USER', subscriptionExpiresAt: getDaysAgo(-15), createdAt: getDaysAgo(10), lastActive: getDaysAgo(10) },
+    { id: '5', email: 'specialist@test.com', fullName: 'Specialist User', phoneNumber: '555-0105', password: 'specialist123', subscriptionTier: 'Specialist', unlockedExams: ["API 653 - Aboveground Storage Tank Inspector", "SIFE - Source Inspector Fixed Equipment"], history: [{ id: 'h4', examName: 'API 653 - Aboveground Storage Tank Inspector', score: 105, totalQuestions: 120, percentage: 87.5, date: getDaysAgo(1), userAnswers: [] }], inProgressQuiz: null, role: 'USER', subscriptionExpiresAt: getDaysAgo(-110), createdAt: getDaysAgo(32), lastActive: getDaysAgo(1) },
+    { id: '3', email: 'cadet@test.com', fullName: 'Cadet User', phoneNumber: '555-0103', password: 'user123', subscriptionTier: 'Cadet', unlockedExams: [], history: [], inProgressQuiz: null, role: 'USER', createdAt: getDaysAgo(5), lastActive: getDaysAgo(5) },
 ];
 
 const initializeDb = () => {
@@ -120,6 +120,34 @@ const api = {
             }
         }
         return updatedUser;
+    },
+
+    async addUser(newUserData: Omit<User, 'id' | 'subscriptionTier' | 'unlockedExams' | 'history' | 'inProgressQuiz' | 'role' | 'createdAt' | 'lastActive'>): Promise<User> {
+        await new Promise(resolve => setTimeout(resolve, NETWORK_DELAY));
+        if (findUserByEmailFromDb(newUserData.email)) {
+            throw new Error('A user with this email already exists.');
+        }
+
+        const newUser: User = {
+            id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
+            email: newUserData.email,
+            password: newUserData.password,
+            fullName: newUserData.fullName,
+            phoneNumber: newUserData.phoneNumber,
+            subscriptionTier: 'Cadet',
+            role: 'USER',
+            unlockedExams: [],
+            history: [],
+            inProgressQuiz: null,
+            createdAt: Date.now(),
+            lastActive: Date.now(),
+        };
+
+        const users = getAllUsersFromDb();
+        users.push(newUser);
+        localStorage.setItem(USERS_KEY, JSON.stringify(users));
+
+        return newUser;
     },
     
     // --- ACTIVITY LOGGING ---
