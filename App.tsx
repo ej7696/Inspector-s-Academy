@@ -1,516 +1,603 @@
-
-
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { GoogleGenAI, Type } from "@google/genai";
+import { User, Question, QuizSettings, QuizResult, UserAnswer, InProgressQuizState } from './types';
 import api from './services/apiService';
-import { User, QuizSettings, Question, QuizResult, InProgressQuizState, SubscriptionTier } from './types';
-import { examSourceData } from './services/examData';
 
+// Components
 import Login from './components/Login';
 import HomePage from './components/HomePage';
-import AdminDashboard from './components/AdminDashboard';
-import Dashboard from './components/Dashboard';
-import UserProfile from './components/UserProfile';
-import Paywall from './components/Paywall';
-import ExamModeSelector from './components/ExamModeSelector';
-import InstructionsModal from './components/InstructionsModal';
-import ProgressBar from './components/ProgressBar';
 import QuestionCard from './components/QuestionCard';
 import ScoreScreen from './components/ScoreScreen';
-import Logo from './components/Logo';
+import AdminDashboard from './components/AdminDashboard';
+import Paywall from './components/Paywall';
+import Dashboard from './components/Dashboard';
+import ExamModeSelector from './components/ExamModeSelector';
+import InstructionsModal from './components/InstructionsModal';
 import ConfirmDialog from './components/ConfirmDialog';
+import Logo from './components/Logo';
+import UserProfile from './components/UserProfile';
 import InfoDialog from './components/InfoDialog';
 
-type AppState = 'login' | 'home' | 'quiz' | 'score' | 'dashboard' | 'admin' | 'profile' | 'paywall' | 'selecting_mode' | 'generating_quiz' | 'instructions';
 
-function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [appState, setAppState] = useState<AppState>('login');
-  
-  const [inProgressQuiz, setInProgressQuiz] = useState<InProgressQuizState | null>(null);
-  const [quizResult, setQuizResult] = useState<QuizResult | null>(null);
-  const [quizSettingsForGeneration, setQuizSettingsForGeneration] = useState<QuizSettings | null>(null);
+type View = 'login' | 'home' | 'quiz' | 'score' | 'admin' | 'paywall' | 'dashboard' | 'exam_mode_selection' | 'instructions' | 'profile';
 
-  const [followUpAnswer, setFollowUpAnswer] = useState('');
-  const [isFollowUpLoading, setIsFollowUpLoading] = useState(false);
-  
-  const [error, setError] = useState('');
+const App: React.FC = () => {
+    const [view, setView] = useState<View>('login');
+    const [user, setUser] = useState<User | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [loadingMessage, setLoadingMessage] = useState('Initializing Academy...');
+    const [error, setError] = useState('');
 
-  const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void; onCancel: () => void; } | null>(null);
-  const [infoDialog, setInfoDialog] = useState<{ open: boolean; title: string; message: string; buttons: any[] } | null>(null);
+    const [questions, setQuestions] = useState<Question[]>([]);
+    const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+    const [userAnswers, setUserAnswers] = useState<UserAnswer[]>([]);
+    const [quizSettings, setQuizSettings] = useState<QuizSettings | null>(null);
+    const [quizResult, setQuizResult] = useState<QuizResult | null>(null);
+    const [isSimulationIntermission, setIsSimulationIntermission] = useState(false);
+    
+    // For Virtual Tutor
+    const [followUpAnswer, setFollowUpAnswer] = useState('');
+    const [isFollowUpLoading, setIsFollowUpLoading] = useState(false);
 
-  const checkSession = useCallback(async () => {
-    const currentUser = await api.getCurrentUser();
-    if (currentUser) {
-      setUser(currentUser);
-      if (currentUser.inProgressQuiz) {
-        setInProgressQuiz(currentUser.inProgressQuiz);
-        setAppState('quiz');
-      } else {
-        setAppState('home');
-      }
-    } else {
-      setAppState('login');
-    }
-    setIsLoading(false);
-  }, []);
+    // For Modals
+    const [pendingUnlock, setPendingUnlock] = useState<null | {
+        examName: string;
+        message: string;
+        numQuestions: number;
+        isTimed: boolean;
+        topics?: string;
+    }>(null);
+    const [slotLimitInfo, setSlotLimitInfo] = useState<null | { examName: string }>(null);
+    const [quizGenerationError, setQuizGenerationError] = useState<string | null>(null);
 
-  useEffect(() => {
-    checkSession();
-  }, [checkSession]);
 
-  const updateUserState = async (updatedUser: User) => {
-      setUser(updatedUser);
-      await api.updateCurrentUserSession(updatedUser);
-  };
+    // Idle Timer State
+    const [isIdleWarningVisible, setIsIdleWarningVisible] = useState(false);
+    const [idleCountdown, setIdleCountdown] = useState(60);
+    const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const handleLoginSuccess = (loggedInUser: User) => {
-    setUser(loggedInUser);
-    if (loggedInUser.role === 'ADMIN' || loggedInUser.role === 'SUB_ADMIN') {
-        // Default admin to their dashboard
-        setAppState('admin');
-    } else if (loggedInUser.inProgressQuiz) {
-      setInProgressQuiz(loggedInUser.inProgressQuiz);
-      setAppState('quiz');
-    } else {
-      setAppState('home');
-    }
-  };
+    // Fix: Moved isAdminImpersonating to component scope to be accessible by the header in the return statement.
+    const isAdminImpersonating = sessionStorage.getItem('adminUser') !== null;
 
-  const handleLogout = async () => {
-    await api.logout();
-    setUser(null);
-    setInProgressQuiz(null);
-    setAppState('login');
-  };
-  
-  const saveQuizProgress = async (shouldGoHome = false) => {
-    if (user && inProgressQuiz) {
-        const updatedUser = { ...user, inProgressQuiz };
-        await api.updateUser(updatedUser);
-        await updateUserState(updatedUser);
-        if(shouldGoHome) {
-            setInProgressQuiz(null);
-            setAppState('home');
+
+    const resetIdleTimer = useCallback(() => {
+        if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+        if (countdownTimerRef.current) clearTimeout(countdownTimerRef.current);
+        setIsIdleWarningVisible(false);
+
+        if (view === 'quiz') {
+            idleTimerRef.current = setTimeout(() => {
+                setIsIdleWarningVisible(true);
+            }, 15 * 60 * 1000); // 15 minutes
         }
-    }
-  };
-  
-  const abandonQuiz = async (shouldGoHome = false) => {
-    if (user) {
-        const updatedUser = { ...user, inProgressQuiz: null };
-        await api.updateUser(updatedUser);
-        await updateUserState(updatedUser);
-        setInProgressQuiz(null);
-        if(shouldGoHome) {
-            setAppState('home');
-        }
-    }
-  };
+    }, [view]);
 
-  const handleGoHome = () => {
-    if (inProgressQuiz && user) {
-        setConfirmDialog({
-            open: true,
-            title: "Leave Quiz?",
-            message: "Do you want to save your progress or abandon this quiz session? If you abandon, progress will be lost.",
-            onConfirm: () => {
-                saveQuizProgress(true);
-                setConfirmDialog(null);
-            },
-            onCancel: () => {
-                abandonQuiz(true);
-                setConfirmDialog(null);
-            }
-        });
-    } else {
-        setQuizResult(null);
-        setAppState('home');
-    }
-  };
-
-  const handleAbandonQuiz = () => {
-     setConfirmDialog({
-        open: true,
-        title: "Abandon Quiz?",
-        message: "Are you sure you want to abandon your current quiz? All progress will be lost.",
-        onConfirm: () => {
-            abandonQuiz(true);
-            setConfirmDialog(null);
-        },
-        onCancel: () => setConfirmDialog(null),
-     });
-  };
-
-  const handleStartQuiz = (examName: string, numQuestions: number, isTimed: boolean, topics?: string) => {
-    if (!user) return;
-    const isPaidUser = user.subscriptionTier === 'Professional' || user.subscriptionTier === 'Specialist';
-    const isUnlocked = user.unlockedExams.includes(examName);
-
-    if (isPaidUser && !isUnlocked) {
-        const maxUnlocks = user.subscriptionTier === 'Professional' ? 1 : 2;
-        if (user.unlockedExams.length >= maxUnlocks) {
-            setInfoDialog({
-                open: true,
-                title: "Exam Slot Limit Reached",
-                message: "You have used all your available exam slots. You can purchase a single exam unlock or upgrade your plan for more slots.",
-                buttons: [
-                    { 
-                        text: 'Unlock for $250', 
-                        onClick: async () => {
-                            const updatedUser: User = { ...user, unlockedExams: [...user.unlockedExams, examName] };
-                            await api.updateUser(updatedUser);
-                            await api.logActivity(user.email, `purchased a one-time unlock for "${examName}".`, 'one_time_unlock');
-                            await updateUserState(updatedUser);
-                            setQuizSettingsForGeneration({ examName, numQuestions, isTimed, examMode: 'open', topics });
-                            setAppState('selecting_mode');
-                            setInfoDialog(null);
-                        }, 
-                        style: 'primary' 
-                    },
-                    { 
-                        text: 'Maybe Later', 
-                        onClick: () => setInfoDialog(null), 
-                        style: 'neutral' 
+    useEffect(() => {
+        if (isIdleWarningVisible) {
+            setIdleCountdown(60);
+            countdownTimerRef.current = setInterval(() => {
+                setIdleCountdown(prev => {
+                    if (prev <= 1) {
+                        clearInterval(countdownTimerRef.current!);
+                        handleIdleLogout();
+                        return 0;
                     }
-                ]
+                    return prev - 1;
+                });
+            }, 1000);
+        } else {
+            if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+        }
+        return () => {
+            if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+        };
+    }, [isIdleWarningVisible]);
+
+    const handleIdleLogout = async () => {
+        if (view === 'quiz') {
+            await saveQuizProgress();
+            setView('home');
+        }
+        setIsIdleWarningVisible(false);
+    };
+
+    useEffect(() => {
+        const events: (keyof WindowEventMap)[] = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'];
+        events.forEach(event => window.addEventListener(event, resetIdleTimer));
+        resetIdleTimer();
+        return () => {
+            events.forEach(event => window.removeEventListener(event, resetIdleTimer));
+            if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+            if (countdownTimerRef.current) clearTimeout(countdownTimerRef.current);
+        };
+    }, [resetIdleTimer, view]);
+
+    const handleUserActivity = () => {
+        resetIdleTimer();
+    };
+
+
+    const goHome = useCallback(() => {
+        setView('home');
+        setError('');
+        setQuizResult(null);
+    }, []);
+
+    const handleLoginSuccess = async (loggedInUser: User) => {
+        setUser(loggedInUser);
+        if (loggedInUser.role === 'ADMIN' || loggedInUser.role === 'SUB_ADMIN') {
+            setView('admin');
+        } else {
+            goHome();
+        }
+        setIsLoading(false);
+    };
+
+    useEffect(() => {
+        const checkSession = async () => {
+            try {
+                const sessionUser = await api.checkSession();
+                if (sessionUser) {
+                    handleLoginSuccess(sessionUser);
+                } else {
+                    setIsLoading(false);
+                }
+            } catch (error) {
+                console.error("Session check failed:", error);
+                setIsLoading(false);
+            }
+        };
+        checkSession();
+    }, []);
+
+    const handleLogout = async () => {
+        await saveQuizProgress();
+        await api.logout();
+        setUser(null);
+        setView('login');
+    };
+
+    const handleUpdateUser = async (updatedData: Partial<User>) => {
+        if (!user) return;
+        try {
+            const updatedUser = await api.updateUser(user.id, updatedData);
+            setUser(updatedUser);
+        } catch (error) {
+            console.error("Failed to update user:", error);
+        }
+    };
+    
+    const initiateQuizFlow = async (examName: string, numQuestions: number, isTimed: boolean, topics?: string) => {
+        if (!user) return;
+        const isPaidUser = user.subscriptionTier !== 'Cadet';
+        const isUnlocked = user.unlockedExams.includes(examName);
+    
+        if (isPaidUser && !isUnlocked) {
+            const maxUnlocks = user.subscriptionTier === 'Professional' ? 1 : 2;
+            if (user.unlockedExams.length >= maxUnlocks) {
+                setSlotLimitInfo({ examName }); // Show custom dialog
+                return;
+            }
+    
+            setPendingUnlock({
+                examName,
+                message: `You have ${maxUnlocks - user.unlockedExams.length} exam slot(s) available. Do you want to use one to unlock "${examName}"? This choice is permanent for your subscription period.`,
+                numQuestions,
+                isTimed,
+                topics
             });
             return;
         }
+    
+        setQuizSettings({ examName, numQuestions, isTimed, examMode: 'open', topics: topics?.trim() });
+        setView('exam_mode_selection');
+    };
 
-        setConfirmDialog({
-            open: true,
-            title: "Unlock New Exam?",
-            message: `This will use one of your ${maxUnlocks - user.unlockedExams.length} remaining exam slots to unlock "${examName}". This action is permanent for your subscription period. Do you wish to proceed?`,
-            onConfirm: async () => {
-                const updatedUser: User = { ...user, unlockedExams: [...user.unlockedExams, examName] };
-                await api.updateUser(updatedUser);
-                await api.logActivity(user.email, `unlocked the "${examName}" exam.`, 'exam_unlock');
-                await updateUserState(updatedUser);
-                setQuizSettingsForGeneration({ examName, numQuestions, isTimed, examMode: 'open', topics });
-                setAppState('selecting_mode');
-                setConfirmDialog(null);
-            },
-            onCancel: () => setConfirmDialog(null)
-        });
-    } else {
-        setQuizSettingsForGeneration({ examName, numQuestions, isTimed, examMode: 'open', topics });
-        setAppState('selecting_mode');
-    }
-  };
-
-  const handleSelectMode = (mode: 'open' | 'closed' | 'simulation') => {
-    if (quizSettingsForGeneration) {
-      const settings: QuizSettings = { ...quizSettingsForGeneration, examMode: mode };
-      setQuizSettingsForGeneration(settings);
-      setAppState('generating_quiz');
-
-      // Kick off generation
-      generateQuestions(settings);
-    }
-  };
-  
-  const generateQuestions = async (settings: QuizSettings) => {
-    setError('');
-    try {
-        const questions = await api.generateQuiz(settings);
-        if (questions.length === 0) {
-            throw new Error("No questions were generated. Please try again.");
+    const startQuiz = async () => {
+        if (!quizSettings || !user) return;
+        setLoadingMessage('Generating your personalized mock exam...');
+        setIsLoading(true);
+        setError('');
+        setQuizGenerationError(null);
+        try {
+            const newQuestions = await api.generateQuiz(quizSettings);
+            setQuestions(newQuestions);
+            setCurrentQuestionIndex(0);
+            setUserAnswers([]);
+            setIsSimulationIntermission(false);
+            setView('quiz');
+        } catch (err: any) {
+            console.error("Quiz generation failed:", err);
+            setQuizGenerationError(err.message || 'An unknown error occurred while generating the quiz.');
+        } finally {
+            setIsLoading(false);
         }
-        
-        const newQuizState: InProgressQuizState = {
-            quizSettings: settings,
-            questions: questions,
-            currentQuestionIndex: 0,
-            userAnswers: new Array(questions.length).fill(null),
-            timeLeft: settings.isTimed ? settings.numQuestions * 2.25 * 60 : null, // 2.25 mins per question
-            simulationPhase: settings.examMode === 'simulation' ? 'closed_book' : null,
-            closedBookResults: null
-        };
-        setInProgressQuiz(newQuizState);
-        setAppState('instructions');
-    } catch (e: any) {
-        console.error("Failed to generate quiz:", e);
-        setError(`Failed to generate quiz: ${e.message}. Please check your connection or API key and try again.`);
-        setAppState('home');
-    }
-  };
-  
-  const handleStartQuizFromInstructions = () => {
-      setAppState('quiz');
-  };
-
-  const handleSelectAnswer = (answer: string) => {
-    if (inProgressQuiz) {
-        const newUserAnswers = [...inProgressQuiz.userAnswers];
-        newUserAnswers[inProgressQuiz.currentQuestionIndex] = answer;
-        setInProgressQuiz({ ...inProgressQuiz, userAnswers: newUserAnswers });
-    }
-  };
-  
-  const finishQuiz = async () => {
-    if (!user || !inProgressQuiz) return;
-    const { questions, userAnswers, quizSettings } = inProgressQuiz;
-
-    let finalQuestions = questions;
-    let finalUserAnswers = userAnswers;
+    };
     
-    // Handle simulation mode transition
-    if(quizSettings.examMode === 'simulation' && inProgressQuiz.simulationPhase === 'closed_book' && inProgressQuiz.closedBookResults === null) {
-      // Store closed book results and generate open book questions
-      const closedBookState = {
-        questions: questions,
-        userAnswers: userAnswers
-      };
-      
-      const openBookSettings: QuizSettings = {
-        ...quizSettings,
-        numQuestions: quizSettings.numQuestions - questions.length, // The rest of the questions
-        examMode: 'open'
-      };
+    const proceedFromIntermission = async () => {
+        if (!quizSettings || !user) return;
+        setLoadingMessage('Generating Open Book section...');
+        setIsLoading(true);
+        setError('');
+        setQuizGenerationError(null);
+        try {
+            const newQuestions = await api.generateQuiz({ ...quizSettings, examMode: 'open' });
+            setQuestions(newQuestions);
+            setCurrentQuestionIndex(0);
+            setIsSimulationIntermission(false);
+            setView('quiz');
+        } catch (err: any) {
+            console.error("Quiz generation failed:", err);
+            setQuizGenerationError(err.message || 'An unknown error occurred while generating the quiz.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
-      setInProgressQuiz({
-        ...inProgressQuiz,
-        closedBookResults: closedBookState,
-        simulationPhase: 'open_book'
-      });
-
-      setAppState('generating_quiz');
-      setInfoDialog({ open: true, title: "Part 1 Complete", message: "The closed book session is complete. Now generating the open book session.", buttons: [{ text: "Continue", onClick: () => setInfoDialog(null), style: 'primary' }] });
-      
-      try {
-        const openBookQuestions = await api.generateQuiz(openBookSettings);
-        setInProgressQuiz(prevState => {
-          if(!prevState) return null;
-          return {
-            ...prevState,
-            questions: openBookQuestions,
-            currentQuestionIndex: 0,
-            userAnswers: new Array(openBookQuestions.length).fill(null),
-          };
+    const handleSelectAnswer = (answer: string) => {
+        setUserAnswers(prev => {
+            const newAnswers = [...prev];
+            newAnswers[currentQuestionIndex] = {
+                ...newAnswers[currentQuestionIndex], // It should already have question, options, answer
+                userAnswer: answer,
+                isCorrect: answer === questions[currentQuestionIndex].answer
+            };
+            return newAnswers;
         });
-        setAppState('quiz');
-      } catch(e: any) {
-         console.error("Failed to generate open book part:", e);
-         setError(`Failed to generate open book part: ${e.message}.`);
-         handleGoHome();
-      }
-      return;
-    }
-    
-    // Combine simulation results for final scoring
-    if (quizSettings.examMode === 'simulation' && inProgressQuiz.closedBookResults) {
-        finalQuestions = [...inProgressQuiz.closedBookResults.questions, ...questions];
-        finalUserAnswers = [...inProgressQuiz.closedBookResults.userAnswers, ...userAnswers];
-    }
-
-    let score = 0;
-    const detailedUserAnswers = finalQuestions.map((q, i) => {
-        const userAnswer = finalUserAnswers[i] ?? "Not Answered";
-        const isCorrect = userAnswer === q.answer;
-        if (isCorrect) score++;
-        return {
-            question: q.question,
-            options: q.options,
-            answer: q.answer,
-            userAnswer,
-            isCorrect,
-            category: q.category,
-            reference: q.reference,
-            explanation: q.explanation
-        };
-    });
-
-    const result: QuizResult = {
-        id: new Date().toISOString(),
-        examName: quizSettings.examName,
-        score,
-        totalQuestions: finalQuestions.length,
-        percentage: (score / finalQuestions.length) * 100,
-        date: Date.now(),
-        userAnswers: detailedUserAnswers
     };
 
-    setQuizResult(result);
-
-    const updatedUser: User = {
-        ...user,
-        history: [...user.history, result],
-        inProgressQuiz: null,
-    };
-    await api.updateUser(updatedUser);
-    await api.logActivity(user.email, `completed a quiz for "${quizSettings.examName}" with a score of ${result.percentage.toFixed(1)}%.`, 'quiz_completion');
-    await updateUserState(updatedUser);
-    setInProgressQuiz(null);
-    setAppState('score');
-  };
-
-  const handleNextQuestion = () => {
-    if (inProgressQuiz) {
-        if (inProgressQuiz.currentQuestionIndex < inProgressQuiz.questions.length - 1) {
-            setInProgressQuiz({ ...inProgressQuiz, currentQuestionIndex: inProgressQuiz.currentQuestionIndex + 1 });
-            setFollowUpAnswer('');
+    const handleNextQuestion = () => {
+        if (currentQuestionIndex < questions.length - 1) {
+            setCurrentQuestionIndex(prev => prev + 1);
         } else {
-            finishQuiz();
+             if (quizSettings?.examMode === 'simulation' && !isSimulationIntermission) {
+                setIsSimulationIntermission(true);
+             } else {
+                finishQuiz();
+             }
         }
-    }
-  };
+        setFollowUpAnswer('');
+    };
 
-  const handleRestartQuiz = () => {
-      if(quizResult) {
-          const settings: QuizSettings = {
-              examName: quizResult.examName,
-              numQuestions: quizResult.totalQuestions,
-              isTimed: false, // Can add logic to preserve this later
-              examMode: 'open' // Default to open for a simple restart
-          };
-          setQuizResult(null);
-          setQuizSettingsForGeneration(settings);
-          setAppState('selecting_mode');
-      }
-  };
-
-  const handleRegenerateExam = () => {
-    if (user && quizResult) {
-        handleStartQuiz(quizResult.examName, 120, true);
-    }
-  };
-
-  const handleAskFollowUp = async (question: Question, query: string) => {
-    setIsFollowUpLoading(true);
-    setFollowUpAnswer('');
-    try {
-        const answer = await api.generateFollowUp(question, query);
-        setFollowUpAnswer(answer);
-    } catch (e: any) {
-        setFollowUpAnswer(`Sorry, I couldn't get an answer. Error: ${e.message}`);
-    } finally {
-        setIsFollowUpLoading(false);
-    }
-  };
-
-  const handleStartWeaknessQuiz = (topics: string) => {
-    if(user) {
-        const examName = user.history.length > 0 ? user.history[user.history.length - 1].examName : "General Knowledge";
-        handleStartQuiz(examName, 10, false, topics);
-    }
-  };
-
-  const handleUpdateUser = async (updatedFields: Partial<User>) => {
-      if (user) {
-          const updatedUser = { ...user, ...updatedFields };
-          const savedUser = await api.updateUser(updatedUser);
-          await updateUserState(savedUser);
-      }
-  };
-
-  const handleUpgradeTier = async (tier: SubscriptionTier) => {
-    if(user) {
-        const updatedUser: User = { 
-            ...user, 
-            subscriptionTier: tier,
-            subscriptionExpiresAt: Date.now() + 4 * 30 * 24 * 60 * 60 * 1000 // 4 months
-        };
-        await api.updateUser(updatedUser);
-        await api.logActivity(user.email, `upgraded to the ${tier} plan.`, 'upgrade');
-        await updateUserState(updatedUser);
-        setAppState('home');
-    }
-  };
-
-  // Render Logic
-  const renderHeader = () => {
-      if (!user) return null;
-      return (
-          <header className="bg-white shadow-md p-4 sticky top-0 z-40">
-              <div className="max-w-7xl mx-auto flex justify-between items-center">
-                  <button onClick={handleGoHome}>
-                    <Logo className="h-12 w-auto" />
-                  </button>
-                  <nav className="flex items-center gap-2 sm:gap-4 flex-wrap justify-end">
-                      {user.role !== 'USER' && <button onClick={() => setAppState('admin')} className="font-semibold text-gray-600 hover:text-blue-600 px-2 py-1 rounded-md">Admin</button>}
-                      <button onClick={() => setAppState('home')} className="font-semibold text-gray-600 hover:text-blue-600 px-2 py-1 rounded-md">Home</button>
-                      {user.subscriptionTier !== 'Cadet' && <button onClick={() => setAppState('dashboard')} className="font-semibold text-gray-600 hover:text-blue-600 px-2 py-1 rounded-md">Dashboard</button>}
-                      <button onClick={() => setAppState('profile')} className="font-semibold text-gray-600 hover:text-blue-600 px-2 py-1 rounded-md">Profile</button>
-                      <button onClick={handleLogout} className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1 rounded-lg text-sm font-semibold">Logout</button>
-                  </nav>
-              </div>
-          </header>
-      );
-  };
-
-  const renderContent = () => {
-    if (isLoading) {
-        return <div className="flex justify-center items-center h-screen"><p className="text-xl">Initializing App...</p></div>;
-    }
-
-    if (appState === 'login' || !user) {
-        return <Login onLoginSuccess={handleLoginSuccess} />;
-    }
-    
-    // Main content for logged-in user
-    switch(appState) {
-        case 'home':
-            return <HomePage user={user} onStartQuiz={handleStartQuiz} onViewDashboard={() => setAppState('dashboard')} onUpgrade={() => setAppState('paywall')} onResumeQuiz={() => setAppState('quiz')} onAbandonQuiz={handleAbandonQuiz}/>;
-        case 'selecting_mode':
-            return quizSettingsForGeneration && <ExamModeSelector examName={quizSettingsForGeneration.examName} onSelectMode={handleSelectMode} onGoHome={handleGoHome} />;
-        case 'generating_quiz':
-            return <div className="text-center p-10"><p className="text-xl animate-pulse">Generating your custom exam, please wait...</p><p className="text-sm text-gray-500 mt-2">This may take up to 30 seconds.</p></div>;
-        case 'instructions':
-            return inProgressQuiz && <InstructionsModal examName={inProgressQuiz.quizSettings.examName} bodyOfKnowledge={examSourceData[inProgressQuiz.quizSettings.examName]?.bodyOfKnowledge || 'No details available.'} onStart={handleStartQuizFromInstructions} onCancel={handleGoHome} />;
-        case 'quiz':
-            if (!inProgressQuiz) {
-              handleGoHome();
-              return <p>Error: No quiz in progress. Returning home...</p>;
+    const finishQuiz = async () => {
+        if (!user || !quizSettings) return;
+        let finalUserAnswers = userAnswers;
+        if (quizSettings.examMode === 'simulation') {
+            const inProgress = user.inProgressQuiz;
+            if (inProgress && inProgress.isSimulationIntermission) {
+                // This is the end of the OPEN book section, combine with closed book answers.
+                finalUserAnswers = [...inProgress.userAnswers, ...userAnswers];
             }
-            const currentQuestion = inProgressQuiz.questions[inProgressQuiz.currentQuestionIndex];
+        }
+
+        const score = finalUserAnswers.filter(a => a.isCorrect).length;
+        const total = finalUserAnswers.length;
+        const percentage = total > 0 ? (score / total) * 100 : 0;
+    
+        const result: Omit<QuizResult, 'id' | 'userId'> = {
+            examName: quizSettings.examName,
+            score,
+            totalQuestions: total,
+            percentage,
+            date: Date.now(),
+            userAnswers: finalUserAnswers,
+        };
+        
+        try {
+            const savedResult = await api.saveQuizResult(user.id, result);
+            setQuizResult(savedResult);
+            const updatedUser = await api.clearInProgressQuiz(user.id);
+            setUser(updatedUser);
+            setView('score');
+            await api.logActivity(user.id, 'quiz_complete', `Completed "${result.examName}" with ${percentage.toFixed(1)}%`);
+        } catch (error) {
+            console.error("Failed to save quiz result:", error);
+            setError("Could not save your quiz result. Please try again.");
+        }
+    };
+    
+    const restartQuiz = () => {
+        if (quizResult) {
+            const previousSettings = {
+                examName: quizResult.examName,
+                numQuestions: quizResult.totalQuestions,
+                isTimed: false, // Default to not timed on restart
+                examMode: 'open' as const // Default to open book on restart
+            };
+            setQuizSettings(previousSettings);
+            startQuiz();
+        }
+    };
+    
+    const saveQuizProgress = async () => {
+        if (view !== 'quiz' || !user || !quizSettings || questions.length === 0) return;
+        
+        const progress: InProgressQuizState = {
+            questions,
+            userAnswers,
+            currentQuestionIndex,
+            quizSettings,
+            startTime: Date.now(),
+            timeRemaining: 0, // Placeholder
+            isSimulationIntermission,
+        };
+        try {
+            await api.saveInProgressQuiz(user.id, progress);
+        } catch (error) {
+            console.error("Failed to save progress:", error);
+        }
+    };
+    
+    const handleResumeQuiz = (progress: InProgressQuizState) => {
+        setQuizSettings(progress.quizSettings);
+        setQuestions(progress.questions);
+        setUserAnswers(progress.userAnswers);
+        setCurrentQuestionIndex(progress.currentQuestionIndex);
+        setIsSimulationIntermission(progress.isSimulationIntermission);
+        setView('quiz');
+    };
+    
+    const handleAbandonQuiz = async () => {
+        if (!user) return;
+        try {
+            const updatedUser = await api.clearInProgressQuiz(user.id);
+            setUser(updatedUser);
+        } catch (error) {
+            console.error("Failed to abandon quiz:", error);
+        }
+    };
+    
+    const handleAskFollowUp = async (question: Question, query: string) => {
+        if (!user || user.subscriptionTier === 'Cadet') return;
+        setIsFollowUpLoading(true);
+        setFollowUpAnswer('');
+        try {
+            const answer = await api.generateFollowUp(question, query);
+            setFollowUpAnswer(answer);
+        } catch (error) {
+            console.error("Failed to get follow-up answer:", error);
+            setFollowUpAnswer("Sorry, I couldn't get an answer for that. Please try again.");
+        } finally {
+            setIsFollowUpLoading(false);
+        }
+    };
+
+    const impersonateUser = async (targetUser: User) => {
+        const adminUser = user;
+        if (!adminUser) return;
+        sessionStorage.setItem('adminUser', JSON.stringify(adminUser));
+        try {
+            const impersonatedUser = await api.login(targetUser.email, targetUser.password!); // Note: This assumes password is available, which is only true in this mock setup.
+            setUser(impersonatedUser);
+            setView('home');
+        } catch (error) {
+            console.error("Impersonation failed", error);
+        }
+    };
+
+    const stopImpersonating = async () => {
+        const adminUserStr = sessionStorage.getItem('adminUser');
+        if (adminUserStr) {
+            const adminUser = JSON.parse(adminUserStr);
+            sessionStorage.removeItem('adminUser');
+            try {
+                const user = await api.login(adminUser.email, adminUser.password);
+                setUser(user);
+                setView('admin');
+            } catch (error) {
+                console.error("Failed to stop impersonating", error);
+                handleLogout(); // Fallback to logout
+            }
+        }
+    };
+
+
+    const renderView = () => {
+        if (isLoading) {
             return (
-                <div className="max-w-4xl mx-auto p-4 md:p-6">
-                    <ProgressBar current={inProgressQuiz.currentQuestionIndex + 1} total={inProgressQuiz.questions.length} />
-                    {inProgressQuiz.quizSettings.examMode === 'simulation' && <p className="text-center font-bold text-indigo-600 mb-4 bg-indigo-100 p-2 rounded-md">SIMULATION MODE: {inProgressQuiz.simulationPhase === 'closed_book' ? 'Part 1 - Closed Book' : 'Part 2 - Open Book'}</p>}
-                    <QuestionCard 
-                        questionNum={inProgressQuiz.currentQuestionIndex + 1} 
-                        totalQuestions={inProgressQuiz.questions.length} 
-                        question={currentQuestion}
-                        onSelectAnswer={handleSelectAnswer}
-                        selectedAnswer={inProgressQuiz.userAnswers[inProgressQuiz.currentQuestionIndex]}
-                        onNext={handleNextQuestion}
-                        isLastQuestion={inProgressQuiz.currentQuestionIndex === inProgressQuiz.questions.length - 1}
-                        isSimulationClosedBook={inProgressQuiz.simulationPhase === 'closed_book'}
-                        isPro={user.subscriptionTier !== 'Cadet'}
-                        onAskFollowUp={handleAskFollowUp}
-                        followUpAnswer={followUpAnswer}
-                        isFollowUpLoading={isFollowUpLoading}
-                        onGoHome={handleGoHome}
-                    />
+                <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100">
+                    <Logo className="h-40 w-auto" />
+                    <p className="text-xl text-gray-600 mt-4">{loadingMessage}</p>
                 </div>
             );
-        case 'score':
-            return quizResult && <ScoreScreen result={quizResult} onRestart={handleRestartQuiz} onGoHome={handleGoHome} isPro={user.subscriptionTier !== 'Cadet'} onViewDashboard={() => setAppState('dashboard')} onRegenerate={handleRegenerateExam} />;
-        case 'dashboard':
-            return <Dashboard history={user.history} onGoHome={handleGoHome} onStartWeaknessQuiz={handleStartWeaknessQuiz} />;
-        case 'admin':
-            return <AdminDashboard currentUser={user} onGoHome={handleGoHome} />;
-        case 'profile':
-            return <UserProfile user={user} onUpdateUser={handleUpdateUser} onGoHome={handleGoHome} onViewDashboard={() => setAppState('dashboard')} onManageSubscription={() => setAppState('paywall')} />;
-        case 'paywall':
-            return <Paywall user={user} onUpgrade={handleUpgradeTier} onCancel={() => setAppState('home')} />;
-        default:
-            return <HomePage user={user} onStartQuiz={handleStartQuiz} onViewDashboard={() => setAppState('dashboard')} onUpgrade={() => setAppState('paywall')} onResumeQuiz={() => setAppState('quiz')} onAbandonQuiz={handleAbandonQuiz}/>;
-    }
-  };
+        }
+    
+        if (!user) {
+            return <Login onLoginSuccess={handleLoginSuccess} />;
+        }
+        
+        // RBAC for admin dashboard
+        if (view === 'admin' && user.role !== 'ADMIN' && user.role !== 'SUB_ADMIN') {
+            goHome(); // Redirect non-admins
+            return null;
+        }
 
-  return (
-    <div className="bg-gray-100 min-h-screen font-sans">
-        {appState !== 'login' && renderHeader()}
-        <main className="pb-10">
-            {error && <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 m-4 rounded-md" role="alert"><p className="font-bold">Error</p><p>{error}</p></div>}
-            {renderContent()}
+        switch (view) {
+            case 'home':
+                return <HomePage 
+                    user={user} 
+                    onStartQuiz={initiateQuizFlow} 
+                    onViewDashboard={() => setView('dashboard')}
+                    onViewProfile={() => setView('profile')}
+                    onViewAdmin={() => setView('admin')}
+                    onLogout={handleLogout}
+                    onUpgrade={() => setView('paywall')}
+                    onResumeQuiz={handleResumeQuiz}
+                    onAbandonQuiz={handleAbandonQuiz}
+                />;
+            case 'exam_mode_selection':
+                return <ExamModeSelector 
+                    examName={quizSettings!.examName}
+                    onSelectMode={(mode) => {
+                        setQuizSettings(prev => ({ ...prev!, examMode: mode }));
+                        setView('instructions');
+                    }}
+                    onGoHome={goHome}
+                />;
+            case 'instructions':
+                return <InstructionsModal
+                    examName={quizSettings!.examName}
+                    bodyOfKnowledge={api.getExamBodyOfKnowledge(quizSettings!.examName)}
+                    onStart={startQuiz}
+                    onCancel={() => setView('exam_mode_selection')}
+                />;
+            case 'quiz':
+                if (isSimulationIntermission) {
+                    return (
+                        <div className="max-w-2xl mx-auto my-10 p-8 text-center bg-white rounded-lg shadow-xl">
+                            <h2 className="text-2xl font-bold text-gray-800 mb-4">Closed Book Section Complete</h2>
+                            <p className="text-gray-600 mb-6">You will now proceed to the timed Open Book section of the exam. The questions will be different.</p>
+                            <button onClick={proceedFromIntermission} className="bg-blue-600 text-white px-8 py-3 rounded-lg font-bold text-lg hover:bg-blue-700 transition-colors">
+                                Start Open Book Section
+                            </button>
+                        </div>
+                    );
+                }
+                return <QuestionCard
+                    questionNum={currentQuestionIndex + 1}
+                    totalQuestions={questions.length}
+                    question={questions[currentQuestionIndex]}
+                    selectedAnswer={userAnswers[currentQuestionIndex]?.userAnswer || null}
+                    onSelectAnswer={handleSelectAnswer}
+                    onNext={handleNextQuestion}
+                    isLastQuestion={currentQuestionIndex === questions.length - 1}
+                    isSimulationClosedBook={quizSettings?.examMode === 'simulation' && !isSimulationIntermission}
+                    isPro={user.subscriptionTier !== 'Cadet'}
+                    onAskFollowUp={handleAskFollowUp}
+                    followUpAnswer={followUpAnswer}
+                    isFollowUpLoading={isFollowUpLoading}
+                    onGoHome={() => {
+                        saveQuizProgress();
+                        setView('home');
+                    }}
+                />;
+            case 'score':
+                return <ScoreScreen 
+                    result={quizResult!} 
+                    onRestart={restartQuiz} 
+                    onGoHome={goHome}
+                    isPro={user.subscriptionTier !== 'Cadet'}
+                    onViewDashboard={() => setView('dashboard')}
+                    onRegenerate={() => {
+                        if (!quizSettings) return;
+                        startQuiz();
+                    }}
+                />;
+            case 'dashboard':
+                return <Dashboard 
+                    history={user.history}
+                    onGoHome={goHome}
+                    onStartWeaknessQuiz={(topics) => {
+                        initiateQuizFlow( "Weakness Practice", 10, false, topics);
+                    }}
+                />;
+            case 'admin':
+                return <AdminDashboard onGoHome={goHome} currentUser={user} onImpersonate={impersonateUser} />;
+            case 'paywall':
+                return <Paywall 
+                    user={user}
+                    onUpgrade={async (tier) => {
+                        await handleUpdateUser({ subscriptionTier: tier, subscriptionExpiresAt: Date.now() + 4 * 30 * 24 * 60 * 60 * 1000 });
+                        await api.logActivity(user.id, 'upgrade', `Upgraded to ${tier} plan.`);
+                        goHome();
+                    }}
+                    onCancel={goHome}
+                />;
+            case 'profile':
+                return <UserProfile 
+                    user={user} 
+                    onUpdateUser={handleUpdateUser} 
+                    onGoHome={goHome}
+                    onViewDashboard={() => setView('dashboard')}
+                    onManageSubscription={() => setView('paywall')}
+                />;
+            default:
+                return <Login onLoginSuccess={handleLoginSuccess} />;
+        }
+    };
+
+    return (
+        <main className="bg-gray-100 min-h-screen" onClick={handleUserActivity} onKeyDown={handleUserActivity} onMouseMove={handleUserActivity}>
+             {user && view !== 'login' && (
+                 <header className="bg-white shadow-md p-4 flex justify-between items-center">
+                    <div onClick={goHome} className="cursor-pointer">
+                        <Logo className="h-16 w-auto" />
+                    </div>
+                     <div className="flex items-center gap-4">
+                        <span className="text-gray-600 hidden sm:inline">Welcome, {user.fullName || user.email}!</span>
+                        {isAdminImpersonating ? (
+                             <button onClick={stopImpersonating} className="bg-red-500 text-white px-3 py-1 rounded-md text-sm font-semibold hover:bg-red-600">
+                                 Stop Impersonating
+                             </button>
+                        ) : (
+                            <button onClick={handleLogout} className="text-sm text-gray-500 hover:text-blue-600 font-semibold">Logout</button>
+                        )}
+                     </div>
+                 </header>
+             )}
+            {renderView()}
+            {pendingUnlock && (
+                <ConfirmDialog
+                    open={true}
+                    title="Unlock Exam?"
+                    message={pendingUnlock.message}
+                    onCancel={() => setPendingUnlock(null)}
+                    onConfirm={async () => {
+                        const { examName, numQuestions, isTimed, topics } = pendingUnlock;
+                        const updatedUser = { ...user!, unlockedExams: [...user!.unlockedExams, examName] };
+                        await handleUpdateUser({ unlockedExams: updatedUser.unlockedExams });
+                        await api.logActivity(user!.id, 'unlock', `Unlocked exam: ${examName}`);
+                        setPendingUnlock(null);
+                        setQuizSettings({ examName, numQuestions, isTimed, examMode: 'open', topics });
+                        setView('exam_mode_selection');
+                    }}
+                />
+            )}
+            {slotLimitInfo && (
+                <InfoDialog
+                    open={true}
+                    title="Exam Slot Limit Reached"
+                    message="You have used all available exam slots for your plan."
+                    buttons={[
+                        { text: 'Unlock for $250', onClick: async () => {
+                             const { examName } = slotLimitInfo;
+                             await handleUpdateUser({ unlockedExams: [...user!.unlockedExams, examName] });
+                             await api.logActivity(user!.id, 'one_time_unlock', `Purchased and unlocked: ${examName}`);
+                             setSlotLimitInfo(null);
+                             // Directly use current quiz settings if available
+                             const settings = quizSettings || { examName, numQuestions: 120, isTimed: true, examMode: 'open' };
+                             setQuizSettings(settings);
+                             setView('exam_mode_selection');
+                        }, style: 'primary' },
+                        { text: 'Maybe Later', onClick: () => setSlotLimitInfo(null), style: 'neutral' }
+                    ]}
+                />
+            )}
+             {quizGenerationError && (
+                 <InfoDialog
+                    open={true}
+                    title="Quiz Generation Failed"
+                    message={`We couldn't create your quiz at this moment. ${quizGenerationError}`}
+                    buttons={[
+                        { text: 'Try Again', onClick: () => { setQuizGenerationError(null); startQuiz(); }, style: 'primary' },
+                        { text: 'Contact Support', onClick: () => { window.location.href = 'mailto:support@inspectors.academy'; }, style: 'secondary' },
+                        { text: 'Back to Home', onClick: () => { setQuizGenerationError(null); goHome(); }, style: 'neutral' }
+                    ]}
+                />
+            )}
+             {isIdleWarningVisible && (
+                <InfoDialog
+                    open={true}
+                    title="Are you still there?"
+                    message={`Your session will be saved and you will be returned to the homepage in ${idleCountdown} seconds due to inactivity.`}
+                    buttons={[
+                        { text: "I'm still here", onClick: handleUserActivity, style: 'primary' }
+                    ]}
+                />
+             )}
         </main>
-        {confirmDialog && confirmDialog.open && <ConfirmDialog open={true} title={confirmDialog.title} message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={confirmDialog.onCancel}/>}
-        {infoDialog && infoDialog.open && <InfoDialog open={true} title={infoDialog.title} message={infoDialog.message} buttons={infoDialog.buttons}/>}
-    </div>
-  );
-}
+    );
+};
 
 export default App;

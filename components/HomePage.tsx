@@ -1,222 +1,221 @@
-import React, { useState, useEffect } from 'react';
-import { User } from '../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { User, InProgressQuizState, Exam, Announcement } from '../types';
+import api from '../services/apiService';
+import ProgressRing from './ProgressRing';
 
 interface Props {
-    user: User;
-    onStartQuiz: (examName: string, numQuestions: number, isTimed: boolean, topics?: string) => void;
-    onViewDashboard: () => void;
-    onUpgrade: () => void;
-    onResumeQuiz: () => void;
-    onAbandonQuiz: () => void;
+  user: User;
+  onStartQuiz: (examName: string, numQuestions: number, isTimed: boolean, topics?: string) => void;
+  onViewDashboard: () => void;
+  onViewProfile: () => void;
+  onViewAdmin: () => void;
+  onLogout: () => void;
+  onUpgrade: () => void;
+  onResumeQuiz: (progress: InProgressQuizState) => void;
+  onAbandonQuiz: () => void;
 }
 
-const allExams: { [key: string]: string[] } = {
-    "API Certifications": [
-        "API 510 - Pressure Vessel Inspector",
-        "API 570 - Piping Inspector",
-        "API 653 - Aboveground Storage Tank Inspector",
-        "API 1169 - Pipeline Construction Inspector",
-        "API 936 - Refractory Personnel",
-    ],
-    "SIFE/SIRE/SIEE Certifications": [
-        "SIFE - Source Inspector Fixed Equipment",
-        "SIRE - Source Inspector Rotating Equipment",
-        "SIEE - Source Inspector Electrical Equipment",
-    ],
-    "AWS Certifications": [
-        "CWI - Certified Welding Inspector",
-    ]
-};
+const HomePage: React.FC<Props> = ({ 
+  user, onStartQuiz, onViewDashboard, onViewProfile, onViewAdmin, onLogout, onUpgrade, onResumeQuiz, onAbandonQuiz 
+}) => {
+  const [exams, setExams] = useState<Exam[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
+  const [numQuestions, setNumQuestions] = useState(10);
+  const [isTimedMode, setIsTimedMode] = useState(false);
+  const [customTopics, setCustomTopics] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
 
-const HomePage: React.FC<Props> = ({ user, onStartQuiz, onViewDashboard, onUpgrade, onResumeQuiz, onAbandonQuiz }) => {
-    const [selectedExam, setSelectedExam] = useState<string | null>(null);
-    const [numQuestions, setNumQuestions] = useState(10);
-    const [isTimedMode, setIsTimedMode] = useState(false);
-    const [customTopics, setCustomTopics] = useState('');
-    const [error, setError] = useState('');
-    
-    const isPaidUser = user.subscriptionTier === 'Professional' || user.subscriptionTier === 'Specialist';
-    const [quizOptionsEnabled, setQuizOptionsEnabled] = useState(!isPaidUser);
-
-    useEffect(() => {
-        if (!isPaidUser) {
-            setQuizOptionsEnabled(true);
-        } else {
-            const isUnlockedAndSelected = selectedExam ? user.unlockedExams.includes(selectedExam) : false;
-            setQuizOptionsEnabled(isUnlockedAndSelected);
-        }
-    }, [selectedExam, user.unlockedExams, isPaidUser]);
-
-    const handleExamClick = (exam: string) => {
-        setError('');
-        setSelectedExam(prevSelected => (prevSelected === exam ? null : exam));
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [examData, announcementData] = await Promise.all([
+          api.getExams(),
+          api.getAnnouncements()
+        ]);
+        setExams(examData.filter(e => e.isActive));
+        setAnnouncements(announcementData.filter(a => a.isActive));
+      } catch (error) {
+        console.error("Failed to fetch initial data:", error);
+      } finally {
+        setIsLoading(false);
+      }
     };
+    fetchData();
+  }, []);
 
-    const handleActionClick = () => {
-        if (!selectedExam) {
-            setError('Please select an exam to begin.');
-            return;
-        }
-        setError('');
-        onStartQuiz(selectedExam, numQuestions, isTimedMode, customTopics.trim());
-    };
-    
-    const maxUnlocks = user.subscriptionTier === 'Professional' ? 1 : (user.subscriptionTier === 'Specialist' ? 2 : 0);
-    const usedSlots = user.unlockedExams.length;
-    
-    const maxQuestions = user.subscriptionTier === 'Cadet' ? 10 : 120;
+  const filteredExams = useMemo(() => {
+    return exams.filter(exam =>
+      exam.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [exams, searchTerm]);
 
-    const getButtonProps = () => {
-        if (!selectedExam) {
-            return { text: 'Select an Exam', disabled: true };
-        }
-        return { text: 'Start Quiz', disabled: false };
-    };
-
-    if (user.inProgressQuiz) {
-        return (
-            <div className="max-w-2xl mx-auto my-10 p-8 bg-white rounded-lg shadow-xl text-center">
-                <h2 className="text-2xl font-bold text-gray-800 mb-4">You have a quiz in progress!</h2>
-                <p className="text-gray-600 mb-6">
-                    "{user.inProgressQuiz.quizSettings.examName}" - {user.inProgressQuiz.currentQuestionIndex} / {user.inProgressQuiz.questions.length} questions answered.
-                </p>
-                <div className="flex justify-center gap-4">
-                    <button onClick={onResumeQuiz} className="bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold text-lg hover:bg-blue-700">
-                        Resume Session
-                    </button>
-                    <button onClick={onAbandonQuiz} className="bg-red-500 text-white px-8 py-3 rounded-lg font-semibold text-lg hover:bg-red-600">
-                        Abandon & Start New
-                    </button>
-                </div>
-            </div>
-        );
+  const handleActionClick = () => {
+    if (selectedExam) {
+      onStartQuiz(selectedExam.name, numQuestions, isTimedMode, customTopics.trim());
     }
+  };
+  
+  const getButtonProps = () => {
+    const isPaid = user.subscriptionTier !== 'Cadet';
+    if (!selectedExam) {
+      return { text: 'Select an Exam', disabled: true };
+    }
+    const isUnlocked = user.unlockedExams.includes(selectedExam.name);
+    if (isPaid && !isUnlocked) {
+      return { text: 'Unlock & Start Quiz', disabled: false };
+    }
+    return { text: 'Start Quiz', disabled: false };
+  };
 
+  const { text: buttonText, disabled: isButtonDisabled } = getButtonProps();
+
+  const getTierColor = (tier: string) => {
+    switch (tier) {
+        case 'Specialist': return 'bg-green-100 text-green-800';
+        case 'Professional': return 'bg-blue-100 text-blue-800';
+        default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getMasteryScore = (examName: string) => {
+      const relevantHistory = user.history.filter(h => h.examName === examName);
+      if (relevantHistory.length === 0) return 0;
+      return Math.max(...relevantHistory.map(h => h.percentage));
+  };
+
+
+  if (isLoading) {
+    return <div className="text-center p-10">Loading exams...</div>;
+  }
+  
+  if (user.inProgressQuiz) {
     return (
-        <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
-            {isPaidUser && (
-                <div className="bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 rounded-lg shadow-md mb-6" role="alert">
-                    <p className="font-bold">Subscription Status: {user.subscriptionTier}</p>
-                    <p>You have unlocked {usedSlots} of {maxUnlocks} available exam slots.</p>
-                </div>
-            )}
-            
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow-md">
-                    {Object.entries(allExams).map(([category, exams]) => (
-                        <div key={category} className="mb-8">
-                            <h2 className="text-2xl font-bold text-gray-800 border-b pb-2 mb-4">{category}</h2>
-                            <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
-                                {exams.map(exam => {
-                                    const isUnlocked = user.unlockedExams.includes(exam);
-                                    return (
-                                        <button 
-                                            key={exam}
-                                            onClick={() => handleExamClick(exam)}
-                                            className={`w-full text-left p-4 rounded-lg transition-all duration-200 border-2 ${selectedExam === exam ? 'bg-blue-50 border-blue-500 shadow-sm' : 'bg-white border-transparent hover:bg-gray-50'}`}
-                                        >
-                                            <div className="flex justify-between items-center">
-                                                <span className="font-semibold text-gray-700">{exam}</span>
-                                                {isPaidUser && (
-                                                    isUnlocked ? (
-                                                        <span className="flex items-center text-sm font-semibold text-green-600 bg-green-100 px-3 py-1 rounded-full">
-                                                            <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
-                                                            Unlocked
-                                                        </span>
-                                                    ) : (
-                                                        <span className="flex items-center text-sm font-semibold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-                                                            <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2V7a5 5 0 00-5-5zm0 2a3 3 0 013 3v2H7V7a3 3 0 013-3z" /></svg>
-                                                            Locked
-                                                        </span>
-                                                    )
-                                                )}
-                                            </div>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-
-                <div className="bg-white p-6 rounded-lg shadow-md h-fit sticky top-8">
-                    <h3 className="text-xl font-bold text-gray-800 mb-4">Quiz Configuration</h3>
-                    
-                    <fieldset disabled={!quizOptionsEnabled} className="space-y-6">
-                        <div>
-                            <label htmlFor="numQuestions" className="block text-sm font-medium text-gray-700">Number of Questions: <span className="font-bold">{numQuestions}</span></label>
-                            <input
-                                id="numQuestions"
-                                type="range"
-                                min="5"
-                                max={maxQuestions}
-                                step="5"
-                                value={numQuestions}
-                                onChange={(e) => setNumQuestions(Number(e.target.value))}
-                                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                            />
-                        </div>
-
-                        <div>
-                            <label htmlFor="customTopics" className="block text-sm font-medium text-gray-700 mb-1">Focus on Specific Topics <span className="text-xs text-gray-500">(Optional)</span></label>
-                            <input
-                                id="customTopics"
-                                type="text"
-                                placeholder="e.g., welding, NDE, corrosion"
-                                value={customTopics}
-                                onChange={(e) => setCustomTopics(e.target.value)}
-                                disabled={user.subscriptionTier === 'Cadet'}
-                                className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
-                            />
-                            {user.subscriptionTier === 'Cadet' && <p className="text-xs text-gray-400 mt-1">Upgrade to Professional to enable this feature.</p>}
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium text-gray-700">Enable Timed Mode</span>
-                            <label className="relative inline-flex items-center cursor-pointer">
-                                <input type="checkbox" checked={isTimedMode} onChange={(e) => setIsTimedMode(e.target.checked)} className="sr-only peer" />
-                                <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-focus:ring-4 peer-focus:ring-blue-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                            </label>
-                        </div>
-                    </fieldset>
-                    
-                    {!quizOptionsEnabled && isPaidUser && selectedExam && (
-                         <div className="mt-4 text-sm text-center text-blue-600 bg-blue-50 p-3 rounded-md">
-                            Click "Start Quiz" to use a slot and unlock this exam. Once unlocked, these options will be enabled.
-                        </div>
-                    )}
-                    
-                    {error && <p className="text-red-500 text-center mt-4">{error}</p>}
-                    
-                    <div className="mt-8 space-y-4">
-                         <button
-                            onClick={handleActionClick}
-                            disabled={getButtonProps().disabled}
-                            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold text-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                        >
-                            {getButtonProps().text}
-                        </button>
-                        
-                        {user.subscriptionTier !== 'Cadet' ? (
-                            <button
-                                onClick={onViewDashboard}
-                                className="w-full bg-gray-700 text-white py-3 rounded-lg font-semibold text-lg hover:bg-gray-800 transition-colors"
-                            >
-                                View Performance Dashboard
-                            </button>
-                        ) : (
-                            <button
-                                onClick={onUpgrade}
-                                className="w-full bg-yellow-500 text-white py-3 rounded-lg font-semibold text-lg hover:bg-yellow-600 transition-colors"
-                            >
-                                Upgrade for Full Access
-                            </button>
-                        )}
-                    </div>
-                </div>
+        <div className="max-w-2xl mx-auto my-10 p-8 bg-white rounded-lg shadow-xl text-center">
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">Resume Your Session?</h2>
+            <p className="text-gray-600 mb-6">
+                You have an in-progress quiz for "{user.inProgressQuiz.quizSettings.examName}".
+            </p>
+            <div className="flex justify-center gap-4">
+                <button onClick={() => onResumeQuiz(user.inProgressQuiz!)} className="bg-blue-600 text-white px-6 py-3 rounded-lg font-bold text-lg hover:bg-blue-700 transition-colors">
+                    Resume Quiz
+                </button>
+                <button onClick={onAbandonQuiz} className="bg-red-500 text-white px-6 py-3 rounded-lg font-bold text-lg hover:bg-red-600 transition-colors">
+                    Abandon & Start New
+                </button>
             </div>
         </div>
     );
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto p-4 md:p-6">
+        {announcements.length > 0 && (
+            <div className="bg-indigo-600 text-white p-4 rounded-lg mb-6 text-center shadow-lg">
+                <p className="font-semibold">{announcements[0].message}</p>
+            </div>
+        )}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow-md">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 gap-4">
+              <div>
+                <h1 className="text-2xl font-bold text-gray-800">Welcome back, {user.fullName || user.email}!</h1>
+                <p className="text-gray-500">Select a certification to start practicing.</p>
+              </div>
+            <div className={`text-sm font-semibold px-3 py-1 rounded-full ${getTierColor(user.subscriptionTier)}`}>
+              {user.subscriptionTier} Plan
+            </div>
+          </div>
+          <input
+            type="text"
+            placeholder="Search for an exam..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full p-3 border border-gray-300 rounded-lg mb-4"
+          />
+          <div className="max-h-[60vh] overflow-y-auto pr-2">
+            <ul className="space-y-3">
+              {filteredExams.map((exam) => {
+                const isUnlocked = user.unlockedExams.includes(exam.name);
+                const isSelected = selectedExam?.id === exam.id;
+                const mastery = getMasteryScore(exam.name);
+
+                return (
+                  <li
+                    key={exam.id}
+                    onClick={() => setSelectedExam(exam)}
+                    className={`p-4 flex items-center justify-between rounded-lg border-2 cursor-pointer transition-all ${
+                      isSelected ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-gray-200 bg-white hover:bg-gray-50'
+                    }`}
+                  >
+                    <div>
+                        <p className="font-semibold text-lg text-gray-800">{exam.name}</p>
+                        <p className="text-sm text-gray-500">Master your certification exam.</p>
+                    </div>
+                    {user.subscriptionTier !== 'Cadet' && (
+                       isUnlocked ? (
+                         <div className="flex items-center gap-2 text-green-600 font-semibold">
+                            <ProgressRing score={mastery} />
+                            <span>Unlocked</span>
+                         </div>
+                       ) : (
+                         <div className="text-sm text-gray-500 font-medium flex items-center gap-1">
+                           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" /></svg>
+                           <span>Locked</span>
+                         </div>
+                       )
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </div>
+        <div className="space-y-6">
+            <div className="bg-white p-6 rounded-lg shadow-md">
+                <h2 className="text-xl font-bold text-gray-800 mb-4">Quiz Settings</h2>
+                <div className="space-y-5">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Number of Questions: {numQuestions}</label>
+                        <input type="range" min="5" max="120" step="5" value={numQuestions} onChange={e => setNumQuestions(Number(e.target.value))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" disabled={!selectedExam}/>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Focus on Specific Topics (Optional)</label>
+                        <input type="text" placeholder="e.g., welding, NDE, corrosion" value={customTopics} onChange={e => setCustomTopics(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg" disabled={!selectedExam || user.subscriptionTier === 'Cadet'}/>
+                        {user.subscriptionTier === 'Cadet' && <p className="text-xs text-gray-500 mt-1">Upgrade to a paid plan to use this feature.</p>}
+                    </div>
+                    <div className="flex items-center justify-between">
+                         <label className="text-sm font-medium text-gray-700">Enable Timed Mode</label>
+                         <div className="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                            <input type="checkbox" checked={isTimedMode} onChange={() => setIsTimedMode(!isTimedMode)} disabled={!selectedExam} className="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
+                            <label className="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
+                        </div>
+                    </div>
+                    <button onClick={handleActionClick} disabled={isButtonDisabled} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold text-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed">
+                        {buttonText}
+                    </button>
+                </div>
+            </div>
+             <div className="bg-white p-6 rounded-lg shadow-md">
+                <h2 className="text-xl font-bold text-gray-800 mb-4">Your Account</h2>
+                <div className="space-y-3">
+                    <button onClick={onViewProfile} className="w-full text-left py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition font-medium">My Profile</button>
+                    <button onClick={onViewDashboard} className="w-full text-left py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition font-medium">Performance Dashboard</button>
+                    {(user.role === 'ADMIN' || user.role === 'SUB_ADMIN') && (
+                        <button onClick={onViewAdmin} className="w-full text-left py-2 px-3 bg-yellow-100 hover:bg-yellow-200 text-yellow-800 rounded-md transition font-medium">Admin Panel</button>
+                    )}
+                    <button onClick={onUpgrade} className="w-full text-left py-2 px-3 bg-green-100 hover:bg-green-200 text-green-800 rounded-md transition font-medium">Upgrade Plan</button>
+                </div>
+            </div>
+        </div>
+      </div>
+       <style>{`
+          .toggle-checkbox:checked { right: 0; border-color: #2563EB; }
+          .toggle-checkbox:checked + .toggle-label { background-color: #2563EB; }
+       `}</style>
+    </div>
+  );
 };
 
 export default HomePage;

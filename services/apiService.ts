@@ -1,261 +1,354 @@
-import { GoogleGenAI, Type } from "@google/genai";
-import { User, QuizSettings, Question, QuizResult, InProgressQuizState, ActivityEvent } from '../types';
+import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
+import { 
+    User, Question, QuizSettings, QuizResult, UserAnswer, InProgressQuizState, ActivityEvent, ActivityEventType, Exam, Announcement,
+    SubscriptionTier, Role 
+} from '../types';
 import { examSourceData } from './examData';
 
-// --- DATABASE & SESSION SIMULATION ---
-const USERS_KEY = 'users_db';
-const SESSION_KEY = 'currentUser_session';
-const ACTIVITY_FEED_KEY = 'activity_feed';
-const NETWORK_DELAY = 500; // ms
+// --- MOCK DATABASE (using localStorage) ---
 
-const getDaysAgo = (days: number) => Date.now() - days * 24 * 60 * 60 * 1000;
+const DB_USERS_KEY = 'academy_users';
+const DB_ACTIVITY_KEY = 'academy_activity';
+const DB_EXAMS_KEY = 'academy_exams';
+const DB_ANNOUNCEMENTS_KEY = 'academy_announcements';
+const SESSION_KEY = 'currentUser';
 
-// --- Seed Data ---
-const getSeedUsers = (): User[] => [
-    { id: '1', email: 'admin@test.com', fullName: 'Admin User', phoneNumber: '555-0101', password: 'admin123', subscriptionTier: 'Specialist', unlockedExams: ["API 510 - Pressure Vessel Inspector", "CWI - Certified Welding Inspector"], history: [{ id: 'h1', examName: 'API 510 - Pressure Vessel Inspector', score: 85, totalQuestions: 100, percentage: 85, date: getDaysAgo(2), userAnswers: [] }, { id: 'h2', examName: 'CWI - Certified Welding Inspector', score: 92, totalQuestions: 120, percentage: 76.6, date: getDaysAgo(5), userAnswers: [] }], inProgressQuiz: null, role: 'ADMIN', subscriptionExpiresAt: getDaysAgo(-120), createdAt: getDaysAgo(200), lastActive: getDaysAgo(0) },
-    { id: '6', email: 'subadmin@test.com', fullName: 'Sub Admin', phoneNumber: '555-0106', password: 'subadmin123', subscriptionTier: 'Specialist', unlockedExams: ["API 570 - Piping Inspector"], history: [], inProgressQuiz: null, role: 'SUB_ADMIN', subscriptionExpiresAt: getDaysAgo(-90), createdAt: getDaysAgo(90), lastActive: getDaysAgo(1) },
-    { id: '2', email: 'userpro@test.com', fullName: 'Professional User', phoneNumber: '555-0102', password: 'userpro123', subscriptionTier: 'Professional', unlockedExams: ["API 570 - Piping Inspector"], history: [{ id: 'h3', examName: 'API 570 - Piping Inspector', score: 68, totalQuestions: 100, percentage: 68, date: getDaysAgo(10), userAnswers: [] }], inProgressQuiz: null, role: 'USER', subscriptionExpiresAt: getDaysAgo(-60), createdAt: getDaysAgo(45), lastActive: getDaysAgo(3) },
-    { id: '4', email: 'user@test.com', fullName: 'Regular User', phoneNumber: '555-0104', password: 'user123', subscriptionTier: 'Professional', unlockedExams: [], history: [], inProgressQuiz: null, role: 'USER', subscriptionExpiresAt: getDaysAgo(-15), createdAt: getDaysAgo(10), lastActive: getDaysAgo(10) },
-    { id: '5', email: 'specialist@test.com', fullName: 'Specialist User', phoneNumber: '555-0105', password: 'specialist123', subscriptionTier: 'Specialist', unlockedExams: ["API 653 - Aboveground Storage Tank Inspector", "SIFE - Source Inspector Fixed Equipment"], history: [{ id: 'h4', examName: 'API 653 - Aboveground Storage Tank Inspector', score: 105, totalQuestions: 120, percentage: 87.5, date: getDaysAgo(1), userAnswers: [] }], inProgressQuiz: null, role: 'USER', subscriptionExpiresAt: getDaysAgo(-110), createdAt: getDaysAgo(32), lastActive: getDaysAgo(1) },
-    { id: '3', email: 'cadet@test.com', fullName: 'Cadet User', phoneNumber: '555-0103', password: 'user123', subscriptionTier: 'Cadet', unlockedExams: [], history: [], inProgressQuiz: null, role: 'USER', createdAt: getDaysAgo(5), lastActive: getDaysAgo(5) },
-];
+let ai: GoogleGenAI;
 
-const initializeDb = () => {
-  if (!localStorage.getItem(USERS_KEY)) {
-    localStorage.setItem(USERS_KEY, JSON.stringify(getSeedUsers()));
-  }
-  if (!localStorage.getItem(ACTIVITY_FEED_KEY)) {
-    localStorage.setItem(ACTIVITY_FEED_KEY, JSON.stringify([]));
-  }
-};
-
-initializeDb();
-
-// --- PRIVATE HELPER FUNCTIONS ---
-
-const getAllUsersFromDb = (): User[] => {
-    try {
-        const usersJson = localStorage.getItem(USERS_KEY);
-        return usersJson ? JSON.parse(usersJson) : [];
-    } catch (error) { return []; }
-};
-
-const findUserByEmailFromDb = (email: string): User | undefined => {
-    return getAllUsersFromDb().find(u => u.email === email);
-};
-
-const updateUserInDb = (updatedUser: User): void => {
-    let users = getAllUsersFromDb();
-    const userIndex = users.findIndex(u => u.id === updatedUser.id);
-    if (userIndex !== -1) {
-        users[userIndex] = updatedUser;
-        localStorage.setItem(USERS_KEY, JSON.stringify(users));
+// Initialize and seed data if DB is empty
+const initializeData = () => {
+    if (!localStorage.getItem(DB_USERS_KEY)) {
+        const now = Date.now();
+        const initialUsers: User[] = [
+            { id: '1', fullName: 'Admin User', email: 'admin@test.com', phoneNumber: '555-0101', password: 'admin123', role: 'ADMIN', subscriptionTier: 'Specialist', unlockedExams: [], history: [], createdAt: now, lastActive: now, permissions: { canEditUsers: true, canResetPasswords: true } },
+            { id: '2', fullName: 'Sub Admin', email: 'subadmin@test.com', phoneNumber: '555-0102', password: 'subadmin123', role: 'SUB_ADMIN', subscriptionTier: 'Specialist', unlockedExams: [], history: [], createdAt: now, lastActive: now, permissions: { canEditUsers: true, canResetPasswords: false } },
+            { id: '3', fullName: 'Pro User', email: 'pro@test.com', phoneNumber: '555-0103', password: 'pro123', role: 'USER', subscriptionTier: 'Professional', unlockedExams: [], history: [], createdAt: now, lastActive: now },
+            { id: '4', fullName: 'Specialist User', email: 'specialist@test.com', phoneNumber: '555-0104', password: 'specialist123', role: 'USER', subscriptionTier: 'Specialist', unlockedExams: [], history: [], createdAt: now, lastActive: now },
+            { id: '5', fullName: 'Cadet User', email: 'cadet@test.com', phoneNumber: '555-0105', password: 'user123', role: 'USER', subscriptionTier: 'Cadet', unlockedExams: [], history: [], createdAt: now, lastActive: now },
+        ];
+        localStorage.setItem(DB_USERS_KEY, JSON.stringify(initialUsers));
+    }
+    if (!localStorage.getItem(DB_EXAMS_KEY)) {
+        const initialExams: Exam[] = Object.keys(examSourceData).map((examName, index) => ({
+            id: `exam_${index + 1}`,
+            name: examName,
+            effectivitySheet: examSourceData[examName].effectivitySheet,
+            bodyOfKnowledge: examSourceData[examName].bodyOfKnowledge,
+            isActive: true,
+        }));
+        localStorage.setItem(DB_EXAMS_KEY, JSON.stringify(initialExams));
+    }
+    if (!localStorage.getItem(DB_ANNOUNCEMENTS_KEY)) {
+        const initialAnnouncements: Announcement[] = [
+            { id: 'announce_1', message: 'Welcome to the new Inspector\'s Academy! We have updated our exam content for 2026.', isActive: true, createdAt: Date.now() }
+        ];
+        localStorage.setItem(DB_ANNOUNCEMENTS_KEY, JSON.stringify(initialAnnouncements));
+    }
+    if (!localStorage.getItem(DB_ACTIVITY_KEY)) {
+        localStorage.setItem(DB_ACTIVITY_KEY, JSON.stringify([]));
     }
 };
 
-const checkAndUpdateSubscriptionStatus = (user: User | null): User | null => {
-    if (user && user.subscriptionExpiresAt && Date.now() > user.subscriptionExpiresAt) {
-        const expiredUser: User = { ...user, subscriptionTier: 'Cadet', unlockedExams: [], subscriptionExpiresAt: undefined };
-        updateUserInDb(expiredUser);
-        api.updateCurrentUserSession(expiredUser); // Update session too
-        return expiredUser;
-    }
-    return user;
-};
 
-
-// --- PUBLIC API SERVICE ---
+// --- API Service Definition ---
 
 const api = {
-    // --- AUTH ---
-    async login(email: string, password: string): Promise<User> {
-        await new Promise(resolve => setTimeout(resolve, NETWORK_DELAY));
-        const user = findUserByEmailFromDb(email);
-        if (user && user.password === password) {
-            const validatedUser = checkAndUpdateSubscriptionStatus(JSON.parse(JSON.stringify(user)));
-            if (validatedUser) {
-                localStorage.setItem(SESSION_KEY, JSON.stringify(validatedUser));
-                await this.logActivity(validatedUser.email, 'logged in.', 'login');
-                return validatedUser;
-            }
-        }
-        throw new Error("Invalid email or password.");
-    },
-
-    async logout(): Promise<void> {
-        await new Promise(resolve => setTimeout(resolve, NETWORK_DELAY / 2));
-        localStorage.removeItem(SESSION_KEY);
-    },
-
-    async getCurrentUser(): Promise<User | null> {
-        await new Promise(resolve => setTimeout(resolve, NETWORK_DELAY / 4));
-        try {
-            const userJson = localStorage.getItem(SESSION_KEY);
-            const user: User | null = userJson ? JSON.parse(userJson) : null;
-            return checkAndUpdateSubscriptionStatus(user);
-        } catch (error) {
-            return null;
+    // --- Initialization ---
+    initialize: () => {
+        initializeData();
+        // The API key is managed by the execution environment.
+        // It's retrieved from `process.env.API_KEY`.
+        // This setup simulates a secure backend where the key is not exposed client-side.
+        if (process.env.API_KEY) {
+           ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        } else {
+           console.error("API_KEY environment variable not set. Quiz generation will fail.");
         }
     },
 
-    async updateCurrentUserSession(user: User): Promise<void> {
-        localStorage.setItem(SESSION_KEY, JSON.stringify(user));
-    },
-
-    // --- USER DATA ---
-    async fetchAllUsers(): Promise<User[]> {
-        await new Promise(resolve => setTimeout(resolve, NETWORK_DELAY));
-        return getAllUsersFromDb().sort((a, b) => a.email.localeCompare(b.email));
-    },
-
-    async updateUser(updatedUser: User): Promise<User> {
-        await new Promise(resolve => setTimeout(resolve, NETWORK_DELAY / 2));
-        updateUserInDb(updatedUser);
+    // --- User & Auth ---
+    
+    login: async (email: string, password?: string): Promise<User> => {
+        await new Promise(res => setTimeout(res, 500)); // Simulate network latency
+        const users: User[] = JSON.parse(localStorage.getItem(DB_USERS_KEY) || '[]');
+        const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
         
-        const currentUserJson = localStorage.getItem(SESSION_KEY);
-        if(currentUserJson) {
-            const currentUser = JSON.parse(currentUserJson);
-            if(currentUser.id === updatedUser.id) {
-                localStorage.setItem(SESSION_KEY, JSON.stringify(updatedUser));
-            }
+        if (!user || (password && user.password !== password)) {
+            throw new Error('Invalid email or password.');
         }
+        
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(user));
+        await api.logActivity(user.id, 'login', `User logged in successfully.`);
+        
+        // Update last active time
+        const updatedUser = { ...user, lastActive: Date.now() };
+        api.updateUser(user.id, { lastActive: Date.now() });
+
         return updatedUser;
     },
 
-    async addUser(newUserData: Omit<User, 'id' | 'subscriptionTier' | 'unlockedExams' | 'history' | 'inProgressQuiz' | 'role' | 'createdAt' | 'lastActive'>): Promise<User> {
-        await new Promise(resolve => setTimeout(resolve, NETWORK_DELAY));
-        if (findUserByEmailFromDb(newUserData.email)) {
-            throw new Error('A user with this email already exists.');
+    logout: async (): Promise<void> => {
+        sessionStorage.removeItem(SESSION_KEY);
+    },
+
+    checkSession: async (): Promise<User | null> => {
+        const userJson = sessionStorage.getItem(SESSION_KEY);
+        if (!userJson) return null;
+        
+        // Re-fetch user data to ensure it's up-to-date
+        const sessionUser = JSON.parse(userJson);
+        const users: User[] = JSON.parse(localStorage.getItem(DB_USERS_KEY) || '[]');
+        const currentUser = users.find(u => u.id === sessionUser.id);
+        return currentUser || null;
+    },
+
+    getAllUsers: async (): Promise<User[]> => {
+        return JSON.parse(localStorage.getItem(DB_USERS_KEY) || '[]');
+    },
+
+    updateUser: async (userId: string, updatedData: Partial<User>): Promise<User> => {
+        let users: User[] = JSON.parse(localStorage.getItem(DB_USERS_KEY) || '[]');
+        let userToUpdate: User | undefined;
+        
+        users = users.map(u => {
+            if (u.id === userId) {
+                userToUpdate = { ...u, ...updatedData };
+                return userToUpdate;
+            }
+            return u;
+        });
+
+        if (!userToUpdate) throw new Error('User not found.');
+
+        localStorage.setItem(DB_USERS_KEY, JSON.stringify(users));
+        
+        // If the updated user is the current session user, update the session
+        const sessionUser = await api.checkSession();
+        if (sessionUser && sessionUser.id === userId) {
+             sessionStorage.setItem(SESSION_KEY, JSON.stringify(userToUpdate));
         }
 
-        const newUser: User = {
-            id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
-            email: newUserData.email,
-            password: newUserData.password,
-            fullName: newUserData.fullName,
-            phoneNumber: newUserData.phoneNumber,
+        return userToUpdate;
+    },
+
+    addUser: async (newUser: Omit<User, 'id' | 'subscriptionTier' | 'unlockedExams' | 'history' | 'inProgressQuiz' | 'role' | 'createdAt' | 'lastActive'>): Promise<User> => {
+        let users: User[] = JSON.parse(localStorage.getItem(DB_USERS_KEY) || '[]');
+        if (users.some(u => u.email.toLowerCase() === newUser.email.toLowerCase())) {
+            throw new Error('An account with this email already exists.');
+        }
+        const now = Date.now();
+        const user: User = {
+            ...newUser,
+            id: `user_${now}`,
             subscriptionTier: 'Cadet',
-            role: 'USER',
             unlockedExams: [],
             history: [],
-            inProgressQuiz: null,
-            createdAt: Date.now(),
-            lastActive: Date.now(),
+            role: 'USER',
+            createdAt: now,
+            lastActive: now,
         };
-
-        const users = getAllUsersFromDb();
-        users.push(newUser);
-        localStorage.setItem(USERS_KEY, JSON.stringify(users));
-
-        return newUser;
-    },
-    
-    // --- ACTIVITY LOGGING ---
-    async logActivity(userEmail: string, message: string, type: ActivityEvent['type']): Promise<void> {
-        await new Promise(resolve => setTimeout(resolve, 100)); // Quick logging
-        try {
-            const feedJson = localStorage.getItem(ACTIVITY_FEED_KEY);
-            let feed: ActivityEvent[] = feedJson ? JSON.parse(feedJson) : [];
-            
-            const newEvent: ActivityEvent = {
-                id: new Date().toISOString() + Math.random(),
-                timestamp: Date.now(),
-                userEmail,
-                message,
-                type
-            };
-            
-            feed.unshift(newEvent); // Add to the top
-            
-            if (feed.length > 50) { // Keep the feed to a reasonable size
-                feed = feed.slice(0, 50);
-            }
-            
-            localStorage.setItem(ACTIVITY_FEED_KEY, JSON.stringify(feed));
-        } catch (e) {
-            console.error("Failed to log activity:", e);
-        }
-    },
-    
-    async fetchActivityFeed(): Promise<ActivityEvent[]> {
-        await new Promise(resolve => setTimeout(resolve, NETWORK_DELAY / 2));
-        try {
-            const feedJson = localStorage.getItem(ACTIVITY_FEED_KEY);
-            return feedJson ? JSON.parse(feedJson) : [];
-        } catch (e) {
-            return [];
-        }
+        users.push(user);
+        localStorage.setItem(DB_USERS_KEY, JSON.stringify(users));
+        return user;
     },
 
-    // --- QUIZ GENERATION (SECURE PROXY SIMULATION) ---
-    async generateQuiz(settings: QuizSettings): Promise<Question[]> {
-        const { examName, numQuestions, examMode, topics } = settings;
-        let numQs = numQuestions;
-        let modeForPrompt = examMode;
+    // --- Quiz Logic ---
 
-        if (examMode === 'simulation') {
-            numQs = Math.floor(numQuestions / 2);
-            modeForPrompt = 'closed';
-        }
+    generateQuiz: async (settings: QuizSettings): Promise<Question[]> => {
+        if (!ai) throw new Error("AI Client not initialized. Check API Key.");
         
-        const examData = examSourceData[examName];
-        if (!examData) throw new Error(`Exam data not found for "${examName}".`);
+        const { examName, numQuestions, examMode, topics } = settings;
+        const source = examSourceData[examName] || { effectivitySheet: 'General Knowledge', bodyOfKnowledge: 'General Knowledge' };
+        
+        const modeForPrompt = examMode === 'simulation' ? 'closed-book' : examMode;
 
         const prompt = `
-            You are a certified API/AWS/NDT exam instructor creating official-style mock questions.
-            Generate ${numQs} unique, high-quality multiple-choice questions for the "${examName}" certification exam (${modeForPrompt} mode).
-            Use the official latest Body of Knowledge and Effectivity Sheet, ensuring the same difficulty and structure as the real certification. The questions must be strictly based on these source materials:
-            EFFECTIVITY SHEET: ${examData.effectivitySheet}
-            BODY OF KNOWLEDGE: ${examData.bodyOfKnowledge}
-            - For open-book style, emphasize clause lookups and calculations.
-            - For closed-book, emphasize conceptual recall and judgment.
-            - Each question must be a JSON object following this exact pattern:
-            {
-                "question": "A concise question text.",
-                "options": ["Option A text", "Option B text", "Option C text", "Option D text"],
-                "answer": "The full text of the correct option, exactly matching one of the four options.",
-                "reference": "The specific code reference, e.g., 'API 510 Section 5.3.2'.",
-                "explanation": "A short, clear reason why the answer is correct.",
-                "category": "A relevant category from the Body of Knowledge, e.g., 'Inspection, Repairs, Corrosion'."
-            }
-            ${topics ? `Focus specifically on these topics: ${topics}` : ''}
-            Format the final output as a valid JSON array of these question objects.
+        You are a certified API/AWS/NDT exam instructor creating official-style mock questions.
+        Generate ${numQuestions} unique, high-quality multiple-choice questions for the "${examName}" certification exam (${modeForPrompt} mode).
+        Use the official latest Body of Knowledge and Effectivity Sheet provided below, ensuring the same difficulty and structure as the real certification.
+        ${topics ? `The user wants to focus specifically on these topics: ${topics}. Ensure a significant portion of the questions target these areas.` : ''}
+
+        - For open-book style, emphasize clause lookups and calculations (show formula or step-based logic in explanation).
+        - For closed-book, emphasize conceptual recall and judgment.
+        - Each question must be distinct and challenging.
+        - The "answer" field must EXACTLY match one of the four options, including the leading "A) ", "B) ", etc.
+        - Provide a concise but thorough "explanation".
+        - Provide a specific "reference" from the source documents.
+        - Provide a relevant "category" for the question.
+
+        SOURCE DOCUMENTS:
+        ---
+        Effectivity Sheet:
+        ${source.effectivitySheet}
+        ---
+        Body of Knowledge:
+        ${source.bodyOfKnowledge}
+        ---
         `;
-        
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+
+        const responseSchema = {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              question: { type: Type.STRING },
+              options: { type: Type.ARRAY, items: { type: Type.STRING } },
+              answer: { type: Type.STRING },
+              reference: { type: Type.STRING },
+              explanation: { type: Type.STRING },
+              category: { type: Type.STRING },
+            },
+            required: ["question", "options", "answer", "explanation", "reference", "category"]
+          }
+        };
+
         const response = await ai.models.generateContent({
           model: 'gemini-2.5-pro',
           contents: prompt,
           config: {
-            responseMimeType: 'application/json',
-            responseSchema: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { question: { type: Type.STRING }, options: { type: Type.ARRAY, items: { type: Type.STRING } }, answer: { type: Type.STRING }, reference: { type: Type.STRING }, explanation: { type: Type.STRING }, category: { type: Type.STRING } }, required: ['question', 'options', 'answer', 'reference', 'explanation', 'category'] } }
+              responseMimeType: "application/json",
+              responseSchema,
           }
         });
 
-        const generatedQuestions = JSON.parse(response.text);
+        const jsonText = response.text.trim();
+        const generatedQuestions = JSON.parse(jsonText);
+        
         if (!Array.isArray(generatedQuestions) || generatedQuestions.length === 0) {
-            throw new Error("The model did not return valid questions.");
+            throw new Error("The AI failed to generate a valid set of questions. Please try again.");
         }
+        
         return generatedQuestions;
     },
     
-    async generateFollowUp(question: Question, query: string): Promise<string> {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+    generateFollowUp: async (question: Question, query: string): Promise<string> => {
+        if (!ai) throw new Error("AI Client not initialized.");
         const prompt = `
-            You are an expert AI Tutor for certification exams. A student is asking a follow-up question about a specific mock exam question.
-            Original Question: "${question.question}"
+            Context: A user is studying for an inspection certification exam.
+            They just answered the following question:
+            Question: "${question.question}"
             Correct Answer: "${question.answer}"
             Explanation: "${question.explanation}"
             Reference: "${question.reference}"
-            Student's Query: "${query}"
-            Provide a clear, concise, and helpful answer to the student's query. Address their question directly, referencing the original context.
+
+            The user has a follow-up question: "${query}"
+
+            Please provide a clear, concise, and helpful answer to their follow-up question, acting as a friendly and knowledgeable tutor.
         `;
+        
         const response = await ai.models.generateContent({
-          model: 'gemini-2.5-pro',
-          contents: prompt,
+            model: 'gemini-2.5-flash',
+            contents: prompt
         });
+
         return response.text;
-    }
+    },
+
+    saveQuizResult: async (userId: string, result: Omit<QuizResult, 'id' | 'userId'>): Promise<QuizResult> => {
+        const newResult: QuizResult = { ...result, id: `result_${Date.now()}`, userId };
+        const user = await api.updateUser(userId, { history: [...(await api.checkSession())!.history, newResult] });
+        return newResult;
+    },
+    
+    saveInProgressQuiz: async (userId: string, progress: InProgressQuizState): Promise<void> => {
+        await api.updateUser(userId, { inProgressQuiz: progress });
+    },
+    
+    clearInProgressQuiz: async (userId: string): Promise<User> => {
+        return await api.updateUser(userId, { inProgressQuiz: null });
+    },
+
+    // --- Activity Feed ---
+    
+    logActivity: async (userId: string, type: ActivityEventType, message: string): Promise<void> => {
+        const users = await api.getAllUsers();
+        const user = users.find(u => u.id === userId);
+        if (!user) return;
+
+        let feed: ActivityEvent[] = JSON.parse(localStorage.getItem(DB_ACTIVITY_KEY) || '[]');
+        const event: ActivityEvent = {
+            id: `event_${Date.now()}`,
+            userId,
+            userEmail: user.email,
+            type,
+            message,
+            timestamp: Date.now()
+        };
+        feed.unshift(event); // Add to the top
+        if (feed.length > 100) feed.pop(); // Keep feed size manageable
+        localStorage.setItem(DB_ACTIVITY_KEY, JSON.stringify(feed));
+    },
+
+    fetchActivityFeed: async (): Promise<ActivityEvent[]> => {
+        return JSON.parse(localStorage.getItem(DB_ACTIVITY_KEY) || '[]');
+    },
+
+    // --- Content Management (Exams) ---
+    getExams: async (): Promise<Exam[]> => {
+        return JSON.parse(localStorage.getItem(DB_EXAMS_KEY) || '[]');
+    },
+    addExam: async (exam: Omit<Exam, 'id'>): Promise<Exam> => {
+        const exams = await api.getExams();
+        const newExam: Exam = { ...exam, id: `exam_${Date.now()}` };
+        exams.push(newExam);
+        localStorage.setItem(DB_EXAMS_KEY, JSON.stringify(exams));
+        return newExam;
+    },
+    updateExam: async (examId: string, updatedData: Partial<Exam>): Promise<Exam> => {
+        let exams = await api.getExams();
+        let examToUpdate: Exam | undefined;
+        exams = exams.map(e => {
+            if (e.id === examId) {
+                examToUpdate = { ...e, ...updatedData };
+                return examToUpdate;
+            }
+            return e;
+        });
+        if (!examToUpdate) throw new Error('Exam not found');
+        localStorage.setItem(DB_EXAMS_KEY, JSON.stringify(exams));
+        return examToUpdate;
+    },
+    deleteExam: async (examId: string): Promise<void> => {
+        let exams = await api.getExams();
+        exams = exams.filter(e => e.id !== examId);
+        localStorage.setItem(DB_EXAMS_KEY, JSON.stringify(exams));
+    },
+    getExamBodyOfKnowledge: (examName: string): string => {
+        return examSourceData[examName]?.bodyOfKnowledge || "No specific knowledge areas defined for this exam.";
+    },
+
+    // --- Content Management (Announcements) ---
+    getAnnouncements: async (): Promise<Announcement[]> => {
+        return JSON.parse(localStorage.getItem(DB_ANNOUNCEMENTS_KEY) || '[]');
+    },
+    addAnnouncement: async (ann: Omit<Announcement, 'id'|'createdAt'>): Promise<Announcement> => {
+        const announcements = await api.getAnnouncements();
+        const newAnn: Announcement = { ...ann, id: `ann_${Date.now()}`, createdAt: Date.now() };
+        announcements.push(newAnn);
+        localStorage.setItem(DB_ANNOUNCEMENTS_KEY, JSON.stringify(announcements));
+        return newAnn;
+    },
+    updateAnnouncement: async (id: string, updatedData: Partial<Announcement>): Promise<Announcement> => {
+        let announcements = await api.getAnnouncements();
+        let annToUpdate: Announcement | undefined;
+        announcements = announcements.map(a => {
+            if (a.id === id) {
+                annToUpdate = { ...a, ...updatedData };
+                return annToUpdate;
+            }
+            return a;
+        });
+        if (!annToUpdate) throw new Error('Announcement not found');
+        localStorage.setItem(DB_ANNOUNCEMENTS_KEY, JSON.stringify(announcements));
+        return annToUpdate;
+    },
+    deleteAnnouncement: async (id: string): Promise<void> => {
+        let announcements = await api.getAnnouncements();
+        announcements = announcements.filter(a => a.id !== id);
+        localStorage.setItem(DB_ANNOUNCEMENTS_KEY, JSON.stringify(announcements));
+    },
 };
+
+api.initialize();
 
 export default api;
