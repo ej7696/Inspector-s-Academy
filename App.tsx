@@ -486,7 +486,7 @@ const App: React.FC = () => {
                 />;
             case 'dashboard':
                 return <Dashboard 
-                    history={user.history}
+                    user={user}
                     onGoHome={goHome}
                     onStartWeaknessQuiz={(topics) => {
                         initiateQuizFlow( "Weakness Practice", 10, false, topics);
