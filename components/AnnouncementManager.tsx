@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Announcement } from '../types';
 import api from '../services/apiService';
+import ConfirmDialog from './ConfirmDialog';
 
 const AnnouncementManager: React.FC = () => {
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [newAnnouncement, setNewAnnouncement] = useState('');
     const [error, setError] = useState('');
+    const [pendingDelete, setPendingDelete] = useState<Announcement | null>(null);
 
     const fetchAnnouncements = async () => {
         try {
@@ -44,14 +46,15 @@ const AnnouncementManager: React.FC = () => {
         }
     };
 
-    const handleDelete = async (id: string) => {
-        if (window.confirm('Are you sure you want to delete this announcement?')) {
-            try {
-                await api.deleteAnnouncement(id);
-                fetchAnnouncements();
-            } catch (err: any) {
-                setError(err.message || 'Failed to delete announcement.');
-            }
+    const confirmDelete = async () => {
+        if (!pendingDelete) return;
+        try {
+            await api.deleteAnnouncement(pendingDelete.id);
+            setPendingDelete(null);
+            fetchAnnouncements();
+        } catch (err: any) {
+            setError(err.message || 'Failed to delete announcement.');
+            setPendingDelete(null);
         }
     };
 
@@ -87,11 +90,20 @@ const AnnouncementManager: React.FC = () => {
                        </div>
                         <div className="flex gap-2 flex-shrink-0">
                              <button onClick={() => handleToggle(ann)} className="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded-md">{ann.isActive ? 'Hide' : 'Show'}</button>
-                             <button onClick={() => handleDelete(ann.id)} className="text-sm bg-red-100 text-red-800 hover:bg-red-200 px-3 py-1 rounded-md">Delete</button>
+                             <button onClick={() => setPendingDelete(ann)} className="text-sm bg-red-100 text-red-800 hover:bg-red-200 px-3 py-1 rounded-md">Delete</button>
                         </div>
                     </li>
                 ))}
             </ul>
+            {pendingDelete && (
+                <ConfirmDialog
+                    open={true}
+                    title="Delete Announcement?"
+                    message="Are you sure you want to permanently delete this announcement? This action cannot be undone."
+                    onConfirm={confirmDelete}
+                    onCancel={() => setPendingDelete(null)}
+                />
+            )}
         </div>
     );
 };
