@@ -418,9 +418,9 @@ const App: React.FC = () => {
         }
     };
 
-    const handleSaveAndExit = async () => {
-        await saveQuizProgress();
-        setView('home');
+    const handleSaveAndExit = async (time: number) => {
+        await saveQuizProgress(time);
+        goHome();
     };
 
     const renderContent = () => {

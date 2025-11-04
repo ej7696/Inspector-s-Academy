@@ -12,7 +12,7 @@ interface Props {
   onToggleFlag: () => void;
   onToggleStrikethrough: (option: string) => void;
   onSubmit: () => void;
-  onSaveAndExit: () => void;
+  onSaveAndExit: (time: number) => void;
 }
 
 const ExamScreen: React.FC<Props> = ({
@@ -125,7 +125,7 @@ const ExamScreen: React.FC<Props> = ({
               <span>{formatTime(timeLeft)}</span>
             </div>
           )}
-          <button onClick={onSaveAndExit} className="flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-red-600 p-2 rounded-md hover:bg-red-100 mr-3" title="Save and go Home">
+          <button onClick={() => onSaveAndExit(timeLeft)} className="flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-red-600 p-2 rounded-md hover:bg-red-100 mr-3" title="Save and go Home">
             <ExitIcon className="w-5 h-5"/>
             <span>Home</span>
           </button>
@@ -162,94 +162,82 @@ const ExamScreen: React.FC<Props> = ({
             
             <div className="space-y-4">
               {(!currentQuestion.type || currentQuestion.type === 'multiple-choice') && currentQuestion.options?.map((option, index) => {
-                const isStruck = currentAnswer?.strikethroughOptions.includes(option);
+                const isStruck = currentAnswer?.strikethroughOptions?.includes(option);
                 return (
-                  <div key={index} className="flex items-center gap-3">
+                  <div key={index} className="flex items-center gap-2">
                     <button 
-                        onClick={() => !isAnswered && onToggleStrikethrough(option)} 
-                        disabled={isAnswered}
-                        className="p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Strikethrough option"
+                      onClick={() => onToggleStrikethrough(option)}
+                      className="p-1 rounded-full hover:bg-gray-200"
+                      title={`Strikethrough option ${String.fromCharCode(65 + index)}`}
+                      disabled={isAnswered}
                     >
-                       <StrikethroughIcon />
+                      <StrikethroughIcon className="w-4 h-4 text-gray-400" />
                     </button>
                     <button
                       onClick={() => !isAnswered && onSelectAnswer(option)}
-                      disabled={isAnswered}
-                      className={`w-full p-4 rounded-lg border-2 text-left transition-colors flex items-center ${getOptionClasses(option)} ${!isAnswered ? 'cursor-pointer' : 'cursor-default'}`}
+                      disabled={isAnswered || isStruck}
+                      className={`p-4 rounded-lg border-2 text-left w-full transition-colors duration-200 
+                        ${isStruck ? 'line-through text-gray-400 bg-gray-100' : getOptionClasses(option)}`}
                     >
-                      <span className="font-semibold mr-3">{String.fromCharCode(65 + index)}.</span> 
-                      <span className={`${isStruck ? 'line-through text-gray-500' : ''}`}>{option}</span>
+                      <span className="font-semibold mr-2">{String.fromCharCode(65 + index)}.</span> {option}
                     </button>
                   </div>
-                );
+                )
               })}
-               {currentQuestion.type === 'true-false' && ['True', 'False'].map((option) => {
-                 return (
-                    <button
-                        key={option}
-                        onClick={() => !isAnswered && onSelectAnswer(option)}
-                        disabled={isAnswered}
-                        className={`w-full p-4 rounded-lg border-2 text-center transition-colors font-semibold text-lg ${getOptionClasses(option)} ${!isAnswered ? 'cursor-pointer' : 'cursor-default'}`}
-                    >
-                        {option}
-                    </button>
-                 )
-               })}
+              {currentQuestion.type === 'true-false' && ['True', 'False'].map((option) => (
+                <button
+                    key={option}
+                    onClick={() => !isAnswered && onSelectAnswer(option)}
+                    disabled={isAnswered}
+                    className={`p-4 rounded-lg border-2 text-center w-full transition-colors duration-200 ${getOptionClasses(option)}`}
+                >
+                    <span className="font-semibold text-lg">{option}</span>
+                </button>
+              ))}
             </div>
 
-            {isAnswered && (
-                <div className="mt-6 space-y-4">
-                    <div className="p-4 rounded-lg bg-gray-50 border">
-                        <p className={`font-semibold ${currentAnswer.userAnswer === currentQuestion.answer ? 'text-green-600' : 'text-red-600'}`}>
-                            {currentAnswer.userAnswer === currentQuestion.answer ? '✅ Correct!' : '❌ Not quite.'}
-                        </p>
-                        <p className="font-semibold text-gray-800">Your Answer: <span className="font-normal">{currentAnswer.userAnswer}</span></p>
-                        {currentAnswer.userAnswer !== currentQuestion.answer && <p className="font-semibold text-green-700">Correct Answer: <span className="font-normal">{currentQuestion.answer}</span></p>}
-                    </div>
-
-                    {(currentQuestion.explanation || currentQuestion.reference) && (
-                        <div className="p-4 rounded-lg bg-blue-50 border border-blue-200 space-y-4">
-                             <button onClick={() => setShowExplanation(!showExplanation)} className="font-semibold text-blue-600 hover:underline flex items-center">
-                                View Explanation & Reference
-                                <svg className={`w-5 h-5 ml-1 transition-transform ${showExplanation ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                            </button>
-                            {showExplanation && (
-                                <div className="space-y-4 pt-4 border-t border-blue-200 text-gray-700">
-                                    {currentQuestion.reference && <p>📘 <strong className="font-semibold">Reference:</strong> {currentQuestion.reference}</p>}
-                                    {currentQuestion.explanation && <p>🧠 <strong className="font-semibold">Rationale:</strong> {currentQuestion.explanation}</p>}
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
+            {isAnswered && (currentQuestion.explanation || currentQuestion.reference) && (
+              <div className="mt-6 p-4 rounded-lg bg-gray-50 border space-y-4">
+                  <button onClick={() => setShowExplanation(!showExplanation)} className="font-semibold text-blue-600 hover:underline flex items-center">
+                      View Explanation & Reference
+                      <svg className={`w-5 h-5 ml-1 transition-transform ${showExplanation ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                  </button>
+                  {showExplanation && (
+                      <div className="space-y-4 pt-4 border-t text-gray-700">
+                          {currentQuestion.reference && <p><strong className="font-semibold">Reference:</strong> {currentQuestion.reference}</p>}
+                          {currentQuestion.explanation && <p><strong className="font-semibold">Rationale:</strong> {currentQuestion.explanation}</p>}
+                      </div>
+                  )}
+              </div>
             )}
-
+            
           </div>
+
+          {/* Bottom Navigation */}
+          <footer className="flex-shrink-0 pt-6">
+            <div className="flex justify-between items-center w-full max-w-4xl mx-auto">
+              <button onClick={() => onNavigate('prev')} disabled={currentIndex === 0} className="flex items-center gap-2 bg-white text-gray-700 px-4 py-2 rounded-lg font-semibold hover:bg-gray-200 transition-colors disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed shadow">
+                <PreviousIcon />
+                Previous
+              </button>
+              <button onClick={onToggleFlag} className="flex items-center gap-2 bg-white text-gray-700 px-4 py-2 rounded-lg font-semibold hover:bg-gray-200 transition-colors shadow">
+                <FlagIcon flagged={currentAnswer?.flagged} />
+                {currentAnswer?.flagged ? 'Unflag' : 'Flag for Review'}
+              </button>
+              {currentIndex === questions.length - 1 ? (
+                <button onClick={onSubmit} className="bg-green-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors shadow-lg">
+                  Review & Submit
+                </button>
+              ) : (
+                <button onClick={() => onNavigate('next')} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors shadow">
+                  Next
+                  <NextIcon />
+                </button>
+              )}
+            </div>
+          </footer>
         </main>
       </div>
-
-      {/* Bottom Bar */}
-      <footer className="flex items-center justify-between p-3 bg-white shadow-inner z-10 flex-shrink-0">
-        <button onClick={() => onNavigate('prev')} disabled={currentIndex === 0} className="flex items-center gap-2 p-2 px-4 rounded-lg font-semibold text-gray-700 bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed">
-            <PreviousIcon />
-            <span>Previous</span>
-        </button>
-        <button onClick={onToggleFlag} className="flex items-center gap-2 p-2 px-4 rounded-lg font-semibold text-gray-700 hover:bg-yellow-100" title="Flag for review later">
-            <FlagIcon flagged={currentAnswer?.flagged} />
-            <span>{currentAnswer?.flagged ? 'Flagged' : 'Flag'}</span>
-        </button>
-        {currentIndex === questions.length - 1 ? (
-             <button onClick={onSubmit} className="p-2 px-6 rounded-lg font-semibold text-white bg-green-600 hover:bg-green-700">
-                Review Exam
-            </button>
-        ) : (
-            <button onClick={() => onNavigate('next')} className="flex items-center gap-2 p-2 px-4 rounded-lg font-semibold text-gray-700 bg-gray-200 hover:bg-gray-300">
-                <span>Next</span>
-                <NextIcon />
-            </button>
-        )}
-      </footer>
     </div>
   );
 };
