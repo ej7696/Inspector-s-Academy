@@ -144,10 +144,10 @@ const ExamScreen: React.FC<Props> = ({
         {/* Question Navigator */}
         <aside className={`fixed lg:relative inset-y-0 left-0 bg-gray-100 border-r border-gray-300 transition-transform duration-300 ease-in-out z-30
             ${isNavigatorVisible ? 'translate-x-0' : '-translate-x-full'}
-            lg:translate-x-0 lg:static w-64 lg:w-28 flex-shrink-0`}>
+            lg:translate-x-0 lg:static w-56 lg:w-28 flex-shrink-0`}>
             <div className="p-2 overflow-hidden h-full flex flex-col">
                 <div className="flex-grow overflow-y-auto">
-                    <div className="grid grid-cols-2 lg:grid-cols-1 gap-2 justify-items-center py-2">
+                    <div className="flex flex-col items-center gap-2 py-2">
                         {questions.map((_, index) => (
                             <button
                                 key={index}
