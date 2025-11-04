@@ -61,8 +61,11 @@ export interface InProgressQuizState {
 }
 
 export interface SubAdminPermissions {
-    canEditUsers: boolean;
-    canResetPasswords: boolean;
+    canEditUserDetails: boolean;
+    canSendPasswordResets: boolean;
+    canManageSubscriptions: boolean;
+    canSuspendUsers: boolean;
+    canManageAnnouncements: boolean;
 }
 
 export interface User {

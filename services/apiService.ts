@@ -20,8 +20,8 @@ const initializeData = () => {
     if (!localStorage.getItem(DB_USERS_KEY)) {
         const now = Date.now();
         const initialUsers: User[] = [
-            { id: '1', fullName: 'Admin User', email: 'admin@test.com', phoneNumber: '555-0101', password: 'admin123', role: 'ADMIN', subscriptionTier: 'Specialist', unlockedExams: [], history: [], createdAt: now, lastActive: now, permissions: { canEditUsers: true, canResetPasswords: true }, isSuspended: false },
-            { id: '2', fullName: 'Sub Admin', email: 'subadmin@test.com', phoneNumber: '555-0102', password: 'subadmin123', role: 'SUB_ADMIN', subscriptionTier: 'Specialist', unlockedExams: [], history: [], createdAt: now, lastActive: now, permissions: { canEditUsers: true, canResetPasswords: false }, isSuspended: false },
+            { id: '1', fullName: 'Admin User', email: 'admin@test.com', phoneNumber: '555-0101', password: 'admin123', role: 'ADMIN', subscriptionTier: 'Specialist', unlockedExams: [], history: [], createdAt: now, lastActive: now, permissions: { canEditUserDetails: true, canSendPasswordResets: true, canManageSubscriptions: true, canSuspendUsers: true, canManageAnnouncements: true }, isSuspended: false },
+            { id: '2', fullName: 'Sub Admin', email: 'subadmin@test.com', phoneNumber: '555-0102', password: 'subadmin123', role: 'SUB_ADMIN', subscriptionTier: 'Specialist', unlockedExams: [], history: [], createdAt: now, lastActive: now, permissions: { canEditUserDetails: true, canSendPasswordResets: true, canManageSubscriptions: false, canSuspendUsers: false, canManageAnnouncements: false }, isSuspended: false },
             { id: '3', fullName: 'Pro User', email: 'pro@test.com', phoneNumber: '555-0103', password: 'pro123', role: 'USER', subscriptionTier: 'Professional', unlockedExams: [], history: [], createdAt: now, lastActive: now, isSuspended: false },
             { id: '4', fullName: 'Specialist User', email: 'specialist@test.com', phoneNumber: '555-0104', password: 'specialist123', role: 'USER', subscriptionTier: 'Specialist', unlockedExams: [], history: [], createdAt: now, lastActive: now, isSuspended: false },
             { id: '5', fullName: 'Cadet User', email: 'cadet@test.com', phoneNumber: '555-0105', password: 'user123', role: 'USER', subscriptionTier: 'Cadet', unlockedExams: [], history: [], createdAt: now, lastActive: now, isSuspended: false },
@@ -134,7 +134,21 @@ const api = {
         
         users = users.map(u => {
             if (u.id === userId) {
-                userToUpdate = { ...u, ...updatedData };
+                const wasNotSubAdmin = u.role !== 'SUB_ADMIN';
+                const isNowSubAdmin = updatedData.role === 'SUB_ADMIN';
+                const finalData = { ...u, ...updatedData };
+
+                if(wasNotSubAdmin && isNowSubAdmin && !finalData.permissions) {
+                    finalData.permissions = {
+                        canEditUserDetails: false,
+                        canSendPasswordResets: false,
+                        canManageSubscriptions: false,
+                        canSuspendUsers: false,
+                        canManageAnnouncements: false,
+                    };
+                }
+
+                userToUpdate = finalData;
                 return userToUpdate;
             }
             return u;

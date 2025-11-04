@@ -33,7 +33,7 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
       const { name, checked } = e.target;
       setFormData(prev => ({ 
           ...prev, 
-          permissions: { ...prev.permissions, [name]: checked }
+          permissions: { ...prev.permissions!, [name]: checked }
       }));
   };
 
@@ -59,6 +59,8 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
       setIsLoading(false);
     }
   };
+
+  const canEditRole = currentUser.role === 'ADMIN' && currentUser.id !== user.id && user.role !== 'ADMIN';
 
   if (!isOpen) return null;
 
@@ -95,10 +97,10 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700">Role</label>
-                    <select name="role" value={formData.role || 'USER'} onChange={handleChange} className="w-full mt-1 p-2 border border-gray-300 rounded-md">
+                    <select name="role" value={formData.role || 'USER'} onChange={handleChange} disabled={!canEditRole} className="w-full mt-1 p-2 border border-gray-300 rounded-md disabled:bg-gray-100">
                         <option value="USER">USER</option>
                         <option value="SUB_ADMIN">SUB_ADMIN</option>
-                        <option value="ADMIN">ADMIN</option>
+                        {currentUser.role === 'ADMIN' && <option value="ADMIN">ADMIN</option>}
                     </select>
                 </div>
             </div>
@@ -109,43 +111,62 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
                     <label className="block text-sm font-bold text-gray-700">Sub-Admin Permissions</label>
                     <div className="mt-2 space-y-2 p-3 bg-gray-50 rounded-md border">
                         <label className="flex items-center">
-                            <input type="checkbox" name="canEditUsers" checked={formData.permissions?.canEditUsers || false} onChange={handlePermissionChange} className="h-4 w-4 text-blue-600 border-gray-300 rounded"/>
-                            <span className="ml-2 text-sm text-gray-700">Can edit user profiles</span>
+                            <input type="checkbox" name="canEditUserDetails" checked={formData.permissions?.canEditUserDetails || false} onChange={handlePermissionChange} className="h-4 w-4 text-blue-600 border-gray-300 rounded"/>
+                            <span className="ml-2 text-sm text-gray-700">Can edit user details (name, phone)</span>
+                        </label>
+                         <label className="flex items-center">
+                            <input type="checkbox" name="canManageSubscriptions" checked={formData.permissions?.canManageSubscriptions || false} onChange={handlePermissionChange} className="h-4 w-4 text-blue-600 border-gray-300 rounded"/>
+                            <span className="ml-2 text-sm text-gray-700">Can manage user subscriptions & unlocks</span>
                         </label>
                         <label className="flex items-center">
-                            <input type="checkbox" name="canResetPasswords" checked={formData.permissions?.canResetPasswords || false} onChange={handlePermissionChange} className="h-4 w-4 text-blue-600 border-gray-300 rounded"/>
-                            <span className="ml-2 text-sm text-gray-700">Can reset user passwords</span>
+                            <input type="checkbox" name="canSendPasswordResets" checked={formData.permissions?.canSendPasswordResets || false} onChange={handlePermissionChange} className="h-4 w-4 text-blue-600 border-gray-300 rounded"/>
+                            <span className="ml-2 text-sm text-gray-700">Can send password resets</span>
+                        </label>
+                         <label className="flex items-center">
+                            <input type="checkbox" name="canSuspendUsers" checked={formData.permissions?.canSuspendUsers || false} onChange={handlePermissionChange} className="h-4 w-4 text-blue-600 border-gray-300 rounded"/>
+                            <span className="ml-2 text-sm text-gray-700">Can suspend / unsuspend users</span>
+                        </label>
+                        <label className="flex items-center">
+                            <input type="checkbox" name="canManageAnnouncements" checked={formData.permissions?.canManageAnnouncements || false} onChange={handlePermissionChange} className="h-4 w-4 text-blue-600 border-gray-300 rounded"/>
+                            <span className="ml-2 text-sm text-gray-700">Can manage announcements</span>
                         </label>
                     </div>
                 </div>
             )}
-            
-            {/* Manual Exam Unlocks */}
-            <div>
-                <label className="block text-sm font-bold text-gray-700">Manually Unlocked Exams</label>
-                <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-2 p-3 bg-gray-50 rounded-md border max-h-40 overflow-y-auto">
-                    {allExams.map(exam => (
-                         <label key={exam.id} className="flex items-center p-2 rounded-md hover:bg-gray-100">
-                            <input type="checkbox" checked={(formData.unlockedExams || []).includes(exam.name)} onChange={() => handleExamToggle(exam.name)} className="h-4 w-4 text-blue-600 border-gray-300 rounded"/>
-                            <span className="ml-2 text-sm text-gray-700">{exam.name}</span>
-                        </label>
-                    ))}
-                </div>
-            </div>
 
-            {error && <p className="text-red-500 text-sm">{error}</p>}
+            {/* Manual Exam Unlocks */}
+            {formData.subscriptionTier !== 'Cadet' && (
+                <div>
+                    <label className="block text-sm font-bold text-gray-700">Manual Exam Unlocks</label>
+                    <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-2">
+                        {allExams.map(exam => (
+                            <label key={exam.id} className="flex items-center p-2 bg-gray-50 border rounded-md">
+                                <input
+                                    type="checkbox"
+                                    checked={(formData.unlockedExams || []).includes(exam.name)}
+                                    onChange={() => handleExamToggle(exam.name)}
+                                    className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                                />
+                                <span className="ml-2 text-sm text-gray-700">{exam.name}</span>
+                            </label>
+                        ))}
+                    </div>
+                </div>
+            )}
+            
+            {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
           
-            {/* Action Buttons */}
-            <div className="flex flex-wrap items-center justify-between pt-4 border-t">
-                 {currentUser.role === 'ADMIN' && currentUser.id !== user.id && (
-                     <button type="button" onClick={() => onImpersonate(user)} className="bg-yellow-500 text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-yellow-600">
-                        Impersonate User
-                    </button>
-                 )}
-                <div className="flex-grow"></div>
-                <div className="flex justify-end gap-4">
-                    <button type="button" onClick={onClose} className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg font-semibold">Cancel</button>
-                    <button type="submit" disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold disabled:bg-gray-400">
+            <div className="flex justify-between items-center pt-4 border-t mt-auto">
+                <div>
+                    {currentUser.role === 'ADMIN' && currentUser.id !== user.id && (
+                        <button type="button" onClick={() => onImpersonate(user)} className="bg-yellow-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-yellow-600 text-sm">
+                            Impersonate User
+                        </button>
+                    )}
+                </div>
+                <div className="flex gap-4">
+                    <button type="button" onClick={onClose} className="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-semibold">Cancel</button>
+                    <button type="submit" disabled={isLoading} className="bg-green-600 text-white px-4 py-2 rounded-lg font-semibold disabled:bg-gray-400">
                         {isLoading ? 'Saving...' : 'Save Changes'}
                     </button>
                 </div>

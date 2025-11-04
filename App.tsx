@@ -293,7 +293,7 @@ const App: React.FC = () => {
             }
         } else if (destination === 'prev') {
             if (currentQuestionIndex > 0) {
-                setCurrentQuestionIndex(prev => prev + 1);
+                setCurrentQuestionIndex(prev => prev - 1);
             }
         } else {
             if (destination >= 0 && destination < questions.length) {
@@ -542,7 +542,6 @@ const App: React.FC = () => {
                         answers={currentQuizAnswers}
                         onSelectAnswer={handleSelectAnswer}
                         onNavigate={handleNavigate}
-                        // Fix: Corrected prop value from `onToggleFlag` to `handleToggleFlag`.
                         onToggleFlag={handleToggleFlag}
                         onToggleStrikethrough={handleToggleStrikethrough}
                         onSubmit={() => setIsReviewing(true)}

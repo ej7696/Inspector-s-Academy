@@ -37,12 +37,23 @@ const AdminDashboard: React.FC<{ onGoHome: () => void; currentUser: User, onImpe
     return () => clearInterval(interval);
   }, []);
   
-  const TABS: { id: Tab, label: string }[] = [
-      { id: 'dashboard', label: 'Dashboard' },
-      { id: 'users', label: 'User Management' },
-      { id: 'exams', label: 'Exam Content' },
-      { id: 'announcements', label: 'Announcements' },
+  const TABS: { id: Tab, label: string, adminOnly: boolean, permission?: keyof User['permissions'] }[] = [
+      { id: 'dashboard', label: 'Dashboard', adminOnly: false },
+      { id: 'users', label: 'User Management', adminOnly: false },
+      { id: 'exams', label: 'Exam Content', adminOnly: true },
+      { id: 'announcements', label: 'Announcements', adminOnly: false, permission: 'canManageAnnouncements' },
   ];
+  
+  const visibleTabs = TABS.filter(tab => {
+      if (currentUser.role === 'ADMIN') return true;
+      if (currentUser.role === 'SUB_ADMIN') {
+          if (tab.adminOnly) return false;
+          if (tab.permission) return currentUser.permissions?.[tab.permission] === true;
+          return true;
+      }
+      return false;
+  });
+
 
   const renderContent = () => {
       switch (activeTab) {
@@ -71,7 +82,7 @@ const AdminDashboard: React.FC<{ onGoHome: () => void; currentUser: User, onImpe
 
         <div className="border-b border-gray-200">
             <nav className="-mb-px flex space-x-6" aria-label="Tabs">
-                {TABS.map(tab => (
+                {visibleTabs.map(tab => (
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
@@ -237,7 +248,9 @@ const UserManagementTab: React.FC<{ allUsers: User[], setAllUsers: React.Dispatc
             <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
                 <h2 className="text-xl font-bold text-gray-800">User Management ({allUsers.length})</h2>
                 <div className="flex gap-2">
-                    <button onClick={handleExportCSV} className="bg-gray-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-gray-700 transition-colors text-sm">Export to CSV</button>
+                    {currentUser.role === 'ADMIN' && (
+                        <button onClick={handleExportCSV} className="bg-gray-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-gray-700 transition-colors text-sm">Export to CSV</button>
+                    )}
                     <button onClick={() => setIsAddUserModalOpen(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors">
                         + Add New User
                     </button>
@@ -277,6 +290,8 @@ const UserManagementTab: React.FC<{ allUsers: User[], setAllUsers: React.Dispatc
                     <tbody className="bg-white divide-y divide-gray-200">
                        {filteredUsers.map(user => {
                            const status = getUserStatus(user.lastActive);
+                           const canManageUser = currentUser.role === 'ADMIN' || (currentUser.role === 'SUB_ADMIN' && user.role === 'USER');
+
                            return (
                                <tr key={user.id}>
                                    <td className="px-6 py-4 whitespace-nowrap">
@@ -302,17 +317,17 @@ const UserManagementTab: React.FC<{ allUsers: User[], setAllUsers: React.Dispatc
                                     </td>
                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                        <div className="relative">
-                                           <button onClick={() => setOpenActionMenu(openActionMenu === user.id ? null : user.id)} className="text-gray-500 hover:text-gray-700">
+                                           <button onClick={() => setOpenActionMenu(openActionMenu === user.id ? null : user.id)} disabled={!canManageUser} className="text-gray-500 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed">
                                                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" /></svg>
                                            </button>
-                                           {openActionMenu === user.id && (
+                                           {openActionMenu === user.id && canManageUser && (
                                                <div className="origin-top-right absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-10">
                                                    <div className="py-1" role="menu" aria-orientation="vertical">
                                                         <a href="#" onClick={(e) => { e.preventDefault(); setEditingUser(user); setOpenActionMenu(null); }} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">View/Manage Profile</a>
                                                         <a href="#" onClick={(e) => { e.preventDefault(); setViewingUserActivity(user); setOpenActionMenu(null); }} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">View Activity Log</a>
-                                                        <a href="#" onClick={(e) => { e.preventDefault(); setPendingPasswordReset(user); setOpenActionMenu(null); }} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">Send Password Reset</a>
-                                                        {currentUser.id !== user.id && <a href="#" onClick={(e) => { e.preventDefault(); onImpersonate(user); setOpenActionMenu(null); }} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">Impersonate User</a>}
-                                                        <a href="#" onClick={(e) => { e.preventDefault(); handleSuspendToggle(user); }} className={`block px-4 py-2 text-sm hover:bg-gray-100 ${user.isSuspended ? 'text-green-600' : 'text-red-600'}`} role="menuitem">{user.isSuspended ? 'Unsuspend User' : 'Suspend User'}</a>
+                                                        {(currentUser.role === 'ADMIN' || currentUser.permissions?.canSendPasswordResets) && <a href="#" onClick={(e) => { e.preventDefault(); setPendingPasswordReset(user); setOpenActionMenu(null); }} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">Send Password Reset</a>}
+                                                        {currentUser.role === 'ADMIN' && currentUser.id !== user.id && <a href="#" onClick={(e) => { e.preventDefault(); onImpersonate(user); setOpenActionMenu(null); }} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem">Impersonate User</a>}
+                                                        {(currentUser.role === 'ADMIN' || currentUser.permissions?.canSuspendUsers) && currentUser.id !== user.id && <a href="#" onClick={(e) => { e.preventDefault(); handleSuspendToggle(user); }} className={`block px-4 py-2 text-sm hover:bg-gray-100 ${user.isSuspended ? 'text-green-600' : 'text-red-600'}`} role="menuitem">{user.isSuspended ? 'Unsuspend User' : 'Suspend User'}</a>}
                                                    </div>
                                                </div>
                                            )}
