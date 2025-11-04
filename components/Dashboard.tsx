@@ -86,13 +86,22 @@ const CadetDashboard: React.FC<{ user: User, onGoHome: () => void }> = ({ user, 
 
 // --- Professional Dashboard ---
 const ProfessionalDashboard: React.FC<{ user: User, onGoHome: () => void, onStartWeaknessQuiz: (topics: string) => void }> = ({ user, onGoHome, onStartWeaknessQuiz }) => {
+    const [historySearchTerm, setHistorySearchTerm] = useState('');
+    
     const unlockedExam = user.unlockedExams[0] || "Your Exam";
     const examHistory = useMemo(() => user.history.filter(h => user.unlockedExams.includes(h.examName)), [user.history, user.unlockedExams]);
     
+    const filteredExamHistory = useMemo(() => {
+        return examHistory.filter(h => 
+            h.examName.toLowerCase().includes(historySearchTerm.toLowerCase())
+        );
+    }, [examHistory, historySearchTerm]);
+
     const readinessScore = useMemo(() => {
         if (examHistory.length === 0) return 0;
         const avgScore = examHistory.reduce((acc, h) => acc + h.percentage, 0) / examHistory.length;
-        const mostRecentScore = examHistory[examHistory.length - 1].percentage;
+        const recentHistory = examHistory.slice(-5);
+        const mostRecentScore = recentHistory.length > 0 ? recentHistory[recentHistory.length - 1].percentage : avgScore;
         // Give more weight to the most recent score
         return (avgScore * 0.4) + (mostRecentScore * 0.6);
     }, [examHistory]);
@@ -173,7 +182,19 @@ const ProfessionalDashboard: React.FC<{ user: User, onGoHome: () => void, onStar
                              <LineChart data={performanceTrend} />
                         </div>
                      )}
-                     <HistoryTable history={examHistory} />
+                    <div className="bg-white p-6 rounded-lg shadow-md">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-semibold text-gray-700">Full Quiz History</h3>
+                            <input
+                                type="text"
+                                placeholder="Search history..."
+                                value={historySearchTerm}
+                                onChange={e => setHistorySearchTerm(e.target.value)}
+                                className="p-2 border border-gray-300 rounded-md text-sm"
+                            />
+                        </div>
+                        <HistoryTable history={filteredExamHistory} />
+                    </div>
                 </div>
             </div>
         </div>
@@ -348,10 +369,10 @@ const LineChart: React.FC<{ data: { labels: string[], scores: number[] } }> = ({
 
 const HistoryTable: React.FC<{ history: QuizResult[] }> = ({ history }) => {
     if (history.length === 0) {
-        return <div className="text-center py-10 bg-white rounded-lg shadow-md"><p className="text-gray-500">No quiz history to display for this selection.</p></div>;
+        return <div className="text-center py-10"><p className="text-gray-500">No quiz history to display for this selection.</p></div>;
     }
     return (
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
+        <div className="overflow-hidden border-b border-gray-200 sm:rounded-lg">
             <div className="overflow-x-auto">
                  <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
