@@ -37,6 +37,8 @@ const App: React.FC = () => {
     const [quizResult, setQuizResult] = useState<QuizResult | null>(null);
     const [isSimulationIntermission, setIsSimulationIntermission] = useState(false);
     const [isReviewing, setIsReviewing] = useState(false);
+    const [followUpAnswer, setFollowUpAnswer] = useState('');
+    const [isFollowUpLoading, setIsFollowUpLoading] = useState(false);
     
     // For Modals
     const [pendingUnlock, setPendingUnlock] = useState<null | {
@@ -148,6 +150,10 @@ const App: React.FC = () => {
         };
         checkSession();
     }, []);
+
+    useEffect(() => {
+        setFollowUpAnswer('');
+    }, [currentQuestionIndex]);
 
     const handleLogout = async () => {
         if (view === 'quiz') {
@@ -295,6 +301,20 @@ const App: React.FC = () => {
             }
             return newAnswers;
         });
+    };
+
+    const handleAskFollowUp = async (question: Question, query: string) => {
+        setIsFollowUpLoading(true);
+        setFollowUpAnswer('');
+        try {
+            const answer = await api.generateFollowUp(question, query);
+            setFollowUpAnswer(answer);
+        } catch (err) {
+            console.error("Follow-up failed:", err);
+            setFollowUpAnswer("Sorry, I couldn't get an answer for that. Please try again.");
+        } finally {
+            setIsFollowUpLoading(false);
+        }
     };
 
     const finishQuiz = async () => {
@@ -452,7 +472,7 @@ const App: React.FC = () => {
                     onAbandonQuiz={handleAbandonQuiz}
                 />;
             case 'quiz':
-                if (quizSettings && questions.length > 0) {
+                if (quizSettings && questions.length > 0 && user) {
                     if (isReviewing) {
                         return <ReviewScreen 
                             questions={questions}
@@ -469,6 +489,7 @@ const App: React.FC = () => {
                         />;
                     }
                     return <ExamScreen
+                        user={user}
                         questions={questions}
                         quizSettings={quizSettings}
                         currentIndex={currentQuestionIndex}
@@ -479,6 +500,9 @@ const App: React.FC = () => {
                         onToggleStrikethrough={handleToggleStrikethrough}
                         onSubmit={() => setIsReviewing(true)}
                         onSaveAndExit={handleSaveAndExit}
+                        onAskFollowUp={handleAskFollowUp}
+                        followUpAnswer={followUpAnswer}
+                        isFollowUpLoading={isFollowUpLoading}
                     />;
                 }
                 return <div>Error: Quiz not loaded correctly. <button onClick={goHome}>Go Home</button></div>;

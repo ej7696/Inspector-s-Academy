@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Question, QuizSettings, InProgressAnswer } from '../types';
+import { Question, QuizSettings, InProgressAnswer, User } from '../types';
 import { FlagIcon, StrikethroughIcon, PreviousIcon, NextIcon, NavigatorIcon, ClockIcon, ExitIcon, CalculatorIcon } from './ExamIcons';
 import Calculator from './Calculator';
 
 interface Props {
+  user: User;
   questions: Question[];
   quizSettings: QuizSettings;
   currentIndex: number;
@@ -14,25 +15,33 @@ interface Props {
   onToggleStrikethrough: (option: string) => void;
   onSubmit: () => void;
   onSaveAndExit: (time: number) => void;
+  onAskFollowUp: (question: Question, query: string) => void;
+  followUpAnswer: string;
+  isFollowUpLoading: boolean;
 }
 
 const ExamScreen: React.FC<Props> = ({
-  questions, quizSettings, currentIndex, answers, onSelectAnswer, onNavigate, onToggleFlag, onToggleStrikethrough, onSubmit, onSaveAndExit
+  user, questions, quizSettings, currentIndex, answers, onSelectAnswer, onNavigate, onToggleFlag, onToggleStrikethrough, onSubmit, onSaveAndExit,
+  onAskFollowUp, followUpAnswer, isFollowUpLoading
 }) => {
   const [isNavigatorVisible, setIsNavigatorVisible] = useState(false);
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState(quizSettings.numQuestions * 90); // 1.5 mins per question
   const [showExplanation, setShowExplanation] = useState(false);
+  const [followUpQuery, setFollowUpQuery] = useState('');
 
   const currentQuestion = questions[currentIndex];
   const currentAnswer = answers[currentIndex];
   const isAnswered = !!currentAnswer?.userAnswer;
+  const isFlagged = !!currentAnswer?.flagged;
+  const nextButtonDisabled = !isAnswered && !isFlagged;
   
   const thirtyMinAlert = useRef(false);
   const fiveMinAlert = useRef(false);
 
   useEffect(() => {
     setShowExplanation(false);
+    setFollowUpQuery('');
   }, [currentIndex]);
   
   useEffect(() => {
@@ -69,6 +78,12 @@ const ExamScreen: React.FC<Props> = ({
     return `${h}:${m}:${s}`;
   };
   
+  const handleAsk = () => {
+    if (followUpQuery.trim()) {
+        onAskFollowUp(currentQuestion, followUpQuery);
+    }
+  };
+
   const getQuestionStatusClass = (index: number) => {
     const answer = answers[index];
     
@@ -224,6 +239,26 @@ const ExamScreen: React.FC<Props> = ({
                       <div className="space-y-4 pt-4 border-t text-gray-700 text-sm sm:text-base">
                           {currentQuestion.reference && <p><strong className="font-semibold">Reference:</strong> {currentQuestion.reference}</p>}
                           {currentQuestion.explanation && <p><strong className="font-semibold">Rationale:</strong> {currentQuestion.explanation}</p>}
+
+                          {(user.subscriptionTier === 'Professional' || user.subscriptionTier === 'Specialist') && (
+                            <div className="pt-4 border-t border-gray-200">
+                                <h4 className="font-semibold text-gray-700 mb-2">Ask a follow-up (Virtual Tutor)</h4>
+                                <div className="flex gap-2">
+                                    <input 
+                                        type="text"
+                                        value={followUpQuery}
+                                        onChange={(e) => setFollowUpQuery(e.target.value)}
+                                        placeholder="e.g., Explain that in simpler terms"
+                                        className="flex-grow p-2 border rounded-md"
+                                    />
+                                    <button onClick={handleAsk} disabled={isFollowUpLoading} className="bg-indigo-500 text-white px-4 py-2 rounded-md hover:bg-indigo-600 disabled:bg-gray-400">
+                                        {isFollowUpLoading ? 'Asking...' : 'Ask'}
+                                    </button>
+                                </div>
+                                {isFollowUpLoading && <p className="text-sm text-gray-500 mt-2">Getting an answer...</p>}
+                                {followUpAnswer && <div className="mt-4 p-3 bg-indigo-50 rounded-md text-gray-800 whitespace-pre-wrap">{followUpAnswer}</div>}
+                            </div>
+                          )}
                       </div>
                   )}
               </div>
@@ -247,7 +282,12 @@ const ExamScreen: React.FC<Props> = ({
                   Review & Submit
                 </button>
               ) : (
-                <button onClick={() => onNavigate('next')} className="flex items-center gap-2 bg-blue-600 text-white px-3 py-2 sm:px-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors shadow">
+                <button 
+                  onClick={() => onNavigate('next')} 
+                  disabled={nextButtonDisabled}
+                  title={nextButtonDisabled ? 'Please select an answer or flag the question to proceed.' : 'Go to the next question'}
+                  className="flex items-center gap-2 bg-blue-600 text-white px-3 py-2 sm:px-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors shadow disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
                   <span className="hidden sm:inline">Next</span>
                   <NextIcon />
                 </button>
