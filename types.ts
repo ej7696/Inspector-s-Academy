@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 
-export type SubscriptionTier = 'Cadet' | 'Professional' | 'Specialist';
+export type SubscriptionTier = 'STARTER' | 'PROFESSIONAL' | 'SPECIALIST';
 export type Role = 'USER' | 'SUB_ADMIN' | 'ADMIN';
 
 export type QuestionType = 'multiple-choice' | 'true-false';

@@ -10,11 +10,11 @@ interface Props {
 
 const Dashboard: React.FC<Props> = ({ user, onGoHome, onStartWeaknessQuiz }) => {
   switch (user.subscriptionTier) {
-    case 'Professional':
+    case 'PROFESSIONAL':
       return <ProfessionalDashboard user={user} onGoHome={onGoHome} onStartWeaknessQuiz={onStartWeaknessQuiz} />;
-    case 'Specialist':
+    case 'SPECIALIST':
       return <SpecialistDashboard user={user} onGoHome={onGoHome} onStartWeaknessQuiz={onStartWeaknessQuiz} />;
-    case 'Cadet':
+    case 'STARTER':
     default:
       return <CadetDashboard user={user} onGoHome={onGoHome} />;
   }
@@ -101,7 +101,6 @@ const ProfessionalDashboard: React.FC<{ user: User, onGoHome: () => void, onStar
         if (examHistory.length === 0) return 0;
         const avgScore = examHistory.reduce((acc, h) => acc + h.percentage, 0) / examHistory.length;
         const recentHistory = examHistory.slice(-5);
-        // FIX: Use bracket notation to access array elements instead of calling the array as a function.
         const mostRecentScore = recentHistory.length > 0 ? recentHistory[recentHistory.length - 1].percentage : avgScore;
         // Give more weight to the most recent score
         return (avgScore * 0.4) + (mostRecentScore * 0.6);

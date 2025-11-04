@@ -11,7 +11,7 @@ const Paywall: React.FC<Props> = ({ user, onUpgrade, onCancel }) => {
 
   const tiers = [
     {
-      name: 'Apprentice Kit',
+      name: 'Starter',
       price: 'Free',
       description: 'For a quick preview of our platform.',
       features: [
@@ -19,11 +19,12 @@ const Paywall: React.FC<Props> = ({ user, onUpgrade, onCancel }) => {
         'Generate up to 5 questions per quiz',
         'Basic question formats'
       ],
-      isCurrent: user.subscriptionTier === 'Cadet',
+      tier: 'STARTER' as SubscriptionTier,
+      isCurrent: user.subscriptionTier === 'STARTER',
       isDeemphasized: true,
     },
     {
-      name: "Inspector's Toolkit",
+      name: "Professional",
       price: '$350 / 4 months',
       description: 'Perfect for focusing on a single, upcoming certification.',
       features: [
@@ -34,31 +35,32 @@ const Paywall: React.FC<Props> = ({ user, onUpgrade, onCancel }) => {
         'All Smart Study Tools & Virtual Tutor'
       ],
       cta: 'Upgrade to Professional',
-      tier: 'Professional' as SubscriptionTier,
-      isCurrent: user.subscriptionTier === 'Professional',
+      tier: 'PROFESSIONAL' as SubscriptionTier,
+      isCurrent: user.subscriptionTier === 'PROFESSIONAL',
     },
     {
-      name: "Master Inspector's Suite",
+      name: "Specialist",
       price: '$650 / 4 months',
       description: 'For the multi-disciplinary inspector pursuing multiple credentials.',
       features: [
         'Unlock full access to TWO exam tracks',
-        'All features from the Inspector\'s Toolkit',
+        'All features from the Professional Toolkit',
         'Cross-exam weakness analysis',
         'Ideal for broader expertise',
       ],
       cta: 'Upgrade to Specialist',
-      tier: 'Specialist' as SubscriptionTier,
+      tier: 'SPECIALIST' as SubscriptionTier,
       isPopular: true,
-      isCurrent: user.subscriptionTier === 'Specialist',
+      isCurrent: user.subscriptionTier === 'SPECIALIST',
     }
   ];
 
   const getContinueText = () => {
-    if (user.subscriptionTier === 'Cadet') {
+    if (user.subscriptionTier === 'STARTER') {
       return "Continue with Free Plan";
     }
-    return `Continue with ${user.subscriptionTier} Plan`;
+    const tierName = user.subscriptionTier.charAt(0) + user.subscriptionTier.slice(1).toLowerCase();
+    return `Continue with ${tierName} Plan`;
   };
 
   const PriceDisplay: React.FC<{ price: string }> = ({ price }) => {
@@ -130,7 +132,7 @@ const Paywall: React.FC<Props> = ({ user, onUpgrade, onCancel }) => {
                   {tier.cta}
                 </button>
               )}
-               {tier.isCurrent && tier.name !== 'Apprentice Kit' && (
+               {tier.isCurrent && tier.name !== 'Starter' && (
                  <div className="text-center p-3 rounded-lg font-bold text-lg bg-gray-200 text-gray-500 cursor-default">
                     Current Plan
                  </div>

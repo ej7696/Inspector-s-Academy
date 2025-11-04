@@ -178,16 +178,16 @@ const App: React.FC = () => {
         if (!user) return;
     
         // Cadet user check for quiz length
-        if (user.subscriptionTier === 'Cadet' && numQuestions > 5) {
+        if (user.subscriptionTier === 'STARTER' && numQuestions > 5) {
             setView('paywall');
             return;
         }
 
-        const isPaidUser = user.subscriptionTier !== 'Cadet';
+        const isPaidUser = user.subscriptionTier !== 'STARTER';
         const isUnlocked = user.unlockedExams.includes(examName);
     
         if (isPaidUser && !isUnlocked) {
-            const maxUnlocks = user.subscriptionTier === 'Professional' ? 1 : 2;
+            const maxUnlocks = user.subscriptionTier === 'PROFESSIONAL' ? 1 : 2;
             if (user.unlockedExams.length >= maxUnlocks) {
                 setUpsellDialogInfo({ examName, numQuestions, isTimed, topics });
                 return;
@@ -206,7 +206,7 @@ const App: React.FC = () => {
         // For Cadets starting a free preview OR paid users starting an unlocked exam
         setQuizSettings({ examName, numQuestions, isTimed, examMode: 'open', topics: topics?.trim() });
         
-        if (user.subscriptionTier === 'Cadet') {
+        if (user.subscriptionTier === 'STARTER') {
             startQuiz(); // Bypass mode selection for Cadets
         } else {
             setView('exam_mode_selection');
@@ -225,7 +225,7 @@ const App: React.FC = () => {
             const finalNumQuestions = Math.min(quizSettings.numQuestions, 170);
 
             // Paywall logic for Cadet tier
-            if (user.subscriptionTier === 'Cadet' && questions.length >= 5) {
+            if (user.subscriptionTier === 'STARTER' && questions.length >= 5) {
                 setView('paywall');
                 setIsLoading(false);
                 return;
@@ -282,7 +282,7 @@ const App: React.FC = () => {
     };
     
     const handleNavigate = (destination: 'next' | 'prev' | number) => {
-        if (user?.subscriptionTier === 'Cadet' && currentQuestionIndex >= 4) {
+        if (user?.subscriptionTier === 'STARTER' && currentQuestionIndex >= 4) {
             setView('paywall');
             return;
         }
@@ -557,7 +557,7 @@ const App: React.FC = () => {
                     result={quizResult} 
                     onRestart={restartQuiz}
                     onGoHome={goHome}
-                    isPro={user?.subscriptionTier !== 'Cadet'}
+                    isPro={user?.subscriptionTier !== 'STARTER'}
                     onViewDashboard={() => setView('dashboard')}
                     onRegenerate={() => initiateQuizFlow(quizResult.examName, 120, true)}
                 />;

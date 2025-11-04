@@ -58,7 +58,7 @@ const HomePage: React.FC<Props> = ({
   };
   
   const getButtonProps = () => {
-    const isPaid = user.subscriptionTier !== 'Cadet';
+    const isPaid = user.subscriptionTier !== 'STARTER';
     if (!selectedExam) {
       return { text: 'Select an Exam', disabled: true };
     }
@@ -71,13 +71,16 @@ const HomePage: React.FC<Props> = ({
 
   const { text: buttonText, disabled: isButtonDisabled } = getButtonProps();
 
-  const getTierColor = (tier: string) => {
+  const getTierInfo = (tier: string) => {
     switch (tier) {
-        case 'Specialist': return 'bg-green-100 text-green-800';
-        case 'Professional': return 'bg-blue-100 text-blue-800';
-        default: return 'bg-gray-100 text-gray-800';
+        case 'SPECIALIST': return { name: 'Specialist', color: 'bg-green-100 text-green-800' };
+        case 'PROFESSIONAL': return { name: 'Professional', color: 'bg-blue-100 text-blue-800' };
+        default: return { name: 'Starter', color: 'bg-gray-100 text-gray-800' };
     }
   };
+  
+  const tierInfo = getTierInfo(user.subscriptionTier);
+
 
   const getMasteryScore = (examName: string) => {
       const relevantHistory = user.history.filter(h => h.examName === examName);
@@ -135,8 +138,8 @@ const HomePage: React.FC<Props> = ({
                 </div>
                 <p className="text-gray-500">Select a certification to start practicing.</p>
               </div>
-            <div className={`text-sm font-semibold px-3 py-1 rounded-full ${getTierColor(user.subscriptionTier)}`}>
-              {user.subscriptionTier} Plan
+            <div className={`text-sm font-semibold px-3 py-1 rounded-full ${tierInfo.color}`}>
+              {tierInfo.name} Plan
             </div>
           </div>
           <input
@@ -165,7 +168,7 @@ const HomePage: React.FC<Props> = ({
                         <p className="font-semibold text-lg text-gray-800">{exam.name}</p>
                         <p className="text-sm text-gray-500">Master your certification exam.</p>
                     </div>
-                    {user.subscriptionTier !== 'Cadet' && (
+                    {user.subscriptionTier !== 'STARTER' && (
                        isUnlocked ? (
                          <div className="flex items-center gap-2 text-green-600 font-semibold">
                             <ProgressRing score={mastery} />
@@ -194,8 +197,8 @@ const HomePage: React.FC<Props> = ({
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Focus on Specific Topics (Optional)</label>
-                        <input type="text" placeholder="e.g., welding, NDE, corrosion" value={customTopics} onChange={e => setCustomTopics(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg" disabled={!selectedExam || user.subscriptionTier === 'Cadet'}/>
-                        {user.subscriptionTier === 'Cadet' && <p className="text-xs text-gray-500 mt-1">Upgrade to a paid plan to use this feature.</p>}
+                        <input type="text" placeholder="e.g., welding, NDE, corrosion" value={customTopics} onChange={e => setCustomTopics(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg" disabled={!selectedExam || user.subscriptionTier === 'STARTER'}/>
+                        {user.subscriptionTier === 'STARTER' && <p className="text-xs text-gray-500 mt-1">Upgrade to a paid plan to use this feature.</p>}
                     </div>
                     <div className="flex items-center justify-between">
                          <label className="text-sm font-medium text-gray-700">Enable Timed Mode</label>
