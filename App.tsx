@@ -48,7 +48,7 @@ const App: React.FC = () => {
         isTimed: boolean;
         topics?: string;
     }>(null);
-    const [slotLimitInfo, setSlotLimitInfo] = useState<null | { examName: string }>(null);
+    const [upsellDialogInfo, setUpsellDialogInfo] = useState<null | { examName: string; numQuestions: number; isTimed: boolean; topics?: string; }>(null);
     const [quizGenerationError, setQuizGenerationError] = useState<string | null>(null);
 
 
@@ -182,7 +182,7 @@ const App: React.FC = () => {
         if (isPaidUser && !isUnlocked) {
             const maxUnlocks = user.subscriptionTier === 'Professional' ? 1 : 2;
             if (user.unlockedExams.length >= maxUnlocks) {
-                setSlotLimitInfo({ examName }); // Show custom dialog
+                setUpsellDialogInfo({ examName, numQuestions, isTimed, topics });
                 return;
             }
     
@@ -443,6 +443,26 @@ const App: React.FC = () => {
         goHome();
     };
 
+    const handleOneTimeUnlock = async () => {
+        if (!user || !upsellDialogInfo) return;
+
+        const { examName, numQuestions, isTimed, topics } = upsellDialogInfo;
+        
+        try {
+            const updatedUser = await api.updateUser(user.id, { unlockedExams: [...user.unlockedExams, examName] });
+            setUser(updatedUser);
+            await api.logActivity(user.id, 'one_time_unlock', `Purchased one-time access to "${examName}" for $250.`);
+            
+            setUpsellDialogInfo(null);
+            
+            setQuizSettings({ examName, numQuestions, isTimed, examMode: 'open', topics });
+            setView('exam_mode_selection');
+        } catch (error) {
+            console.error("One-time unlock failed:", error);
+            setError("There was an issue unlocking the exam. Please try again.");
+        }
+    };
+
     const renderContent = () => {
         if (isLoading) {
             return (
@@ -591,14 +611,14 @@ const App: React.FC = () => {
                     }}
                 />
             )}
-            {slotLimitInfo && (
+            {upsellDialogInfo && (
                 <InfoDialog
                     open={true}
                     title="Exam Slot Limit Reached"
-                    message="You have used all available exam slots for your current subscription period. To practice this exam, please upgrade to the Specialist plan for an additional slot."
+                    message={`You have used all your available exam slots. You can purchase one-time access to "${upsellDialogInfo.examName}" to continue.`}
                     buttons={[
-                        { text: 'View Upgrade Options', onClick: () => { setSlotLimitInfo(null); setView('paywall'); }, style: 'primary' },
-                        { text: 'Go Back', onClick: () => setSlotLimitInfo(null), style: 'neutral' }
+                        { text: 'Unlock Now for $250', onClick: handleOneTimeUnlock, style: 'primary' },
+                        { text: 'Back to Homepage', onClick: () => { setUpsellDialogInfo(null); goHome(); }, style: 'neutral' }
                     ]}
                 />
             )}
