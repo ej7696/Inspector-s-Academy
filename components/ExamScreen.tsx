@@ -68,12 +68,22 @@ const ExamScreen: React.FC<Props> = ({
   };
   
   const getQuestionStatusClass = (index: number) => {
-    if (answers[index]?.flagged) {
-        return 'bg-yellow-400 border-yellow-500 text-black hover:bg-yellow-500';
+    const answer = answers[index];
+    
+    if (answer?.flagged) {
+      return 'bg-yellow-100 border-yellow-500 text-yellow-800 hover:bg-yellow-200';
     }
-    if (answers[index]?.userAnswer) {
-        return 'bg-green-500 border-green-600 text-white hover:bg-green-600';
+    
+    if (answer?.userAnswer) {
+      const question = questions[index];
+      const isCorrect = question.answer === answer.userAnswer;
+      if (isCorrect) {
+        return 'bg-green-100 border-green-500 text-green-800 hover:bg-green-200';
+      } else {
+        return 'bg-red-100 border-red-500 text-red-800 hover:bg-red-200';
+      }
     }
+    
     return 'bg-white border-gray-400 text-gray-800 hover:bg-gray-200';
   };
   
@@ -115,9 +125,9 @@ const ExamScreen: React.FC<Props> = ({
               <span>{formatTime(timeLeft)}</span>
             </div>
           )}
-          <button onClick={onSaveAndExit} className="flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-red-600 p-2 rounded-md hover:bg-red-100" title="Save and Exit">
+          <button onClick={onSaveAndExit} className="flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-red-600 p-2 rounded-md hover:bg-red-100 mr-3" title="Save and go Home">
             <ExitIcon className="w-5 h-5"/>
-            <span>Exit</span>
+            <span>Home</span>
           </button>
         </div>
       </header>

@@ -21,9 +21,23 @@ const ReviewScreen: React.FC<Props> = ({ questions, answers, onReviewQuestion, o
     }, [answers]);
 
     const getStatusClass = (index: number) => {
-        if (answers[index].flagged) return 'bg-yellow-300 border-yellow-400 hover:bg-yellow-400';
-        if (answers[index].userAnswer) return 'bg-green-200 border-green-300 hover:bg-green-300';
-        return 'bg-white hover:bg-gray-100 border-gray-300';
+        const answer = answers[index];
+        const question = questions[index];
+        
+        if (answer.flagged) {
+            return 'bg-yellow-100 border-yellow-500 text-yellow-800 hover:bg-yellow-200';
+        }
+        
+        if (answer.userAnswer) {
+            const isCorrect = answer.userAnswer === question.answer;
+            if (isCorrect) {
+                return 'bg-green-100 border-green-500 text-green-800 hover:bg-green-200';
+            } else {
+                return 'bg-red-100 border-red-500 text-red-800 hover:bg-red-200';
+            }
+        }
+        
+        return 'bg-white border-gray-400 text-gray-800 hover:bg-gray-200';
     };
 
     const CategorySection: React.FC<{ title: string; indices: number[], color: string }> = ({ title, indices, color }) => (
