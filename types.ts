@@ -3,9 +3,12 @@ import { GoogleGenAI } from "@google/genai";
 export type SubscriptionTier = 'Cadet' | 'Professional' | 'Specialist';
 export type Role = 'USER' | 'SUB_ADMIN' | 'ADMIN';
 
+export type QuestionType = 'multiple-choice' | 'true-false';
+
 export interface Question {
   question: string;
-  options: string[];
+  type: QuestionType;
+  options?: string[]; // Optional for True/False questions
   answer: string;
   reference?: string;
   explanation?: string;
@@ -22,12 +25,18 @@ export interface QuizSettings {
 
 export interface UserAnswer {
   question: string;
-  options: string[];
+  options?: string[]; // Optional for True/False questions
   answer: string;
   userAnswer: string;
   isCorrect: boolean;
   category?: string;
   confidence?: 'guess' | 'sure' | 'confident';
+}
+
+export interface InProgressAnswer {
+  userAnswer: string | null;
+  flagged: boolean;
+  strikethroughOptions: string[];
 }
 
 export interface QuizResult {
@@ -43,7 +52,7 @@ export interface QuizResult {
 
 export interface InProgressQuizState {
   questions: Question[];
-  userAnswers: UserAnswer[];
+  answers: InProgressAnswer[];
   currentQuestionIndex: number;
   quizSettings: QuizSettings;
   startTime: number;

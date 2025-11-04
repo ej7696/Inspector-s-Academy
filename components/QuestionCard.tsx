@@ -98,18 +98,36 @@ const QuestionCard: React.FC<Props> = ({
       <h2 className="text-xl font-semibold text-gray-800 mb-4">Question {questionNum} of {totalQuestions}</h2>
       <p className="text-lg text-gray-700 mb-6">{question.question}</p>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        {question.options.map((option, index) => (
-          <button
-            key={index}
-            onClick={() => !submitted && onSelectAnswer(option)}
-            disabled={submitted}
-            className={`p-4 rounded-lg border-2 text-left transition-colors duration-200 ${getOptionClasses(option)}`}
-          >
-            <span className="font-semibold mr-2">{String.fromCharCode(65 + index)}.</span> {option}
-          </button>
-        ))}
-      </div>
+      {/* Conditionally render question types */}
+      {(!question.type || question.type === 'multiple-choice') && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          {question.options?.map((option, index) => (
+            <button
+              key={index}
+              onClick={() => !submitted && onSelectAnswer(option)}
+              disabled={submitted}
+              className={`p-4 rounded-lg border-2 text-left transition-colors duration-200 ${getOptionClasses(option)}`}
+            >
+              <span className="font-semibold mr-2">{String.fromCharCode(65 + index)}.</span> {option}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {question.type === 'true-false' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          {['True', 'False'].map((option) => (
+            <button
+              key={option}
+              onClick={() => !submitted && onSelectAnswer(option)}
+              disabled={submitted}
+              className={`p-4 rounded-lg border-2 text-center transition-colors duration-200 ${getOptionClasses(option)}`}
+            >
+              <span className="font-semibold text-lg">{option}</span>
+            </button>
+          ))}
+        </div>
+      )}
       
       {!submitted ? (
         <button
