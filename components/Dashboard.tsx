@@ -101,6 +101,7 @@ const ProfessionalDashboard: React.FC<{ user: User, onGoHome: () => void, onStar
         if (examHistory.length === 0) return 0;
         const avgScore = examHistory.reduce((acc, h) => acc + h.percentage, 0) / examHistory.length;
         const recentHistory = examHistory.slice(-5);
+        // FIX: Use bracket notation to access array elements instead of calling the array as a function.
         const mostRecentScore = recentHistory.length > 0 ? recentHistory[recentHistory.length - 1].percentage : avgScore;
         // Give more weight to the most recent score
         return (avgScore * 0.4) + (mostRecentScore * 0.6);
@@ -277,7 +278,7 @@ const SpecialistDashboard: React.FC<{ user: User, onGoHome: () => void, onStartW
                          <p className="text-center text-gray-500 py-4">Unlock an exam to see your mastery overview.</p>
                     )}
                      <div className="text-right text-sm text-gray-500 mt-4">
-                        Slots Used: {user.unlockedExams.length} / 2 | <a href="#" onClick={onGoHome} className="text-blue-600 hover:underline">Unlock More</a>
+                        Slots Used: {user.unlockedExams.length} / 2 | <a href="#" onClick={(e) => { e.preventDefault(); onGoHome(); }} className="text-blue-600 hover:underline">Unlock More</a>
                     </div>
                 </div>
 
