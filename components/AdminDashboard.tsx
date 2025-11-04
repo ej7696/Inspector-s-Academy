@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { User, ActivityEvent, Exam } from '../types';
+// FIX: Imported QuizResult type
+import { User, ActivityEvent, Exam, QuizResult } from '../types';
 import api from '../services/apiService';
 import AddUserModal from './AddUserModal';
 import ConfirmDialog from './ConfirmDialog';
@@ -14,7 +15,9 @@ const AdminDashboard: React.FC<{ onGoHome: () => void; currentUser: User, onImpe
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [activityFeed, setActivityFeed] = useState<ActivityEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>('users'); // Default to User Management
+  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [userFilter, setUserFilter] = useState<{ type: 'exam', value: string } | null>(null);
+
 
   const fetchAllData = async () => {
     try {
@@ -54,13 +57,18 @@ const AdminDashboard: React.FC<{ onGoHome: () => void; currentUser: User, onImpe
       return false;
   });
 
+  const handleExamChartClick = (examName: string) => {
+      setUserFilter({ type: 'exam', value: examName });
+      setActiveTab('users');
+  };
+
 
   const renderContent = () => {
       switch (activeTab) {
           case 'dashboard':
-              return <MonitoringTab users={allUsers} activityFeed={activityFeed} />;
+              return <MonitoringTab users={allUsers} activityFeed={activityFeed} onExamChartClick={handleExamChartClick} onQuickNav={(tab) => setActiveTab(tab)} />;
           case 'users':
-              return <UserManagementTab allUsers={allUsers} setAllUsers={setAllUsers} currentUser={currentUser} onImpersonate={onImpersonate} activityFeed={activityFeed} />;
+              return <UserManagementTab allUsers={allUsers} setAllUsers={setAllUsers} currentUser={currentUser} onImpersonate={onImpersonate} activityFeed={activityFeed} initialFilter={userFilter} />;
           case 'exams':
               return <ExamManager />;
           case 'announcements':
@@ -85,7 +93,10 @@ const AdminDashboard: React.FC<{ onGoHome: () => void; currentUser: User, onImpe
                 {visibleTabs.map(tab => (
                     <button
                         key={tab.id}
-                        onClick={() => setActiveTab(tab.id)}
+                        onClick={() => {
+                            setActiveTab(tab.id);
+                            setUserFilter(null); // Clear filter when changing tabs
+                        }}
                         className={`${
                             activeTab === tab.id
                                 ? 'border-blue-500 text-blue-600'
@@ -106,65 +117,272 @@ const AdminDashboard: React.FC<{ onGoHome: () => void; currentUser: User, onImpe
 };
 
 
-const MonitoringTab: React.FC<{ users: User[], activityFeed: ActivityEvent[] }> = ({ users, activityFeed }) => {
-    const totalUsers = users.length;
-    const activeUsers = users.filter(u => Date.now() - u.lastActive < 7 * 24 * 60 * 60 * 1000).length;
+const MonitoringTab: React.FC<{ users: User[], activityFeed: ActivityEvent[], onExamChartClick: (examName: string) => void, onQuickNav: (tab: Tab) => void }> = ({ users, activityFeed, onExamChartClick, onQuickNav }) => {
+    const [activityFilter, setActivityFilter] = useState<ActivityEvent['type'] | 'all'>('all');
+    
+    const stats = useMemo(() => {
+        const now = Date.now();
+        const last7Days = 7 * 24 * 60 * 60 * 1000;
+        const last14Days = 14 * 24 * 60 * 60 * 1000;
+        const last30Days = 30 * 24 * 60 * 60 * 1000;
+        const last60Days = 60 * 24 * 60 * 60 * 1000;
 
-    const subscriptionCounts = users.reduce((acc, user) => {
-        acc[user.subscriptionTier] = (acc[user.subscriptionTier] || 0) + 1;
-        return acc;
-    }, {} as Record<string, number>);
+        const currentActive = users.filter(u => now - u.lastActive < last7Days).length;
+        const prevActive = users.filter(u => now - u.lastActive >= last7Days && now - u.lastActive < last14Days).length;
 
-    const quizzesToday = users.reduce((acc, user) => {
-        return acc + user.history.filter(h => Date.now() - h.date < 24 * 60 * 60 * 1000).length;
-    }, 0);
+        const currentTotal = users.length;
+        const prevTotal = users.filter(u => now - u.createdAt > last30Days).length;
+        
+        const newSignupsThisMonth = users.filter(u => now - u.createdAt < last30Days).length;
 
+        const subscriptionCounts = users.reduce((acc, user) => {
+            acc[user.subscriptionTier] = (acc[user.subscriptionTier] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+
+        const quizzesToday = users.reduce((acc, user) => {
+            return acc + user.history.filter(h => now - h.date < 24 * 60 * 60 * 1000).length;
+        }, 0);
+        
+        return {
+            totalUsers: { value: currentTotal, trend: prevTotal > 0 ? ((currentTotal - prevTotal) / prevTotal) * 100 : 0 },
+            activeUsers: { value: currentActive, trend: prevActive > 0 ? ((currentActive - prevActive) / prevActive) * 100 : 0 },
+            newSignups: { value: newSignupsThisMonth },
+            subscriptionCounts,
+            quizzesToday,
+        };
+    }, [users]);
+    
+    const userGrowthData = useMemo(() => {
+        const last90Days = 90 * 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        const recentUsers = users.filter(u => now - u.createdAt < last90Days);
+        const dailySignups = recentUsers.reduce((acc, user) => {
+            const date = new Date(user.createdAt).toISOString().split('T')[0];
+            acc[date] = (acc[date] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+
+        const labels: string[] = [];
+        const data: number[] = [];
+        let cumulative = users.length - recentUsers.length;
+        for (let i = 89; i >= 0; i--) {
+            const d = new Date(now - i * 24 * 60 * 60 * 1000);
+            const dateKey = d.toISOString().split('T')[0];
+            labels.push(dateKey);
+            cumulative += (dailySignups[dateKey] || 0);
+            data.push(cumulative);
+        }
+        return { labels, data };
+    }, [users]);
+
+
+    const filteredActivity = useMemo(() => {
+        if (activityFilter === 'all') return activityFeed;
+        return activityFeed.filter(event => event.type === activityFilter);
+    }, [activityFeed, activityFilter]);
+    
     const examPerformance = useMemo(() => {
-        const examStats: { [name: string]: { total: number; correct: number, count: number } } = {};
+        const examStats: { [name: string]: { quizzes: QuizResult[] } } = {};
         users.forEach(user => {
             user.history.forEach(result => {
                 if (!examStats[result.examName]) {
-                    examStats[result.examName] = { total: 0, correct: 0, count: 0 };
+                    examStats[result.examName] = { quizzes: [] };
                 }
-                examStats[result.examName].total += result.totalQuestions;
-                examStats[result.examName].correct += result.score;
-                examStats[result.examName].count++;
+                examStats[result.examName].quizzes.push(result);
             });
         });
 
-        return Object.entries(examStats).map(([name, stats]) => ({
-            name,
-            popularity: stats.count,
-            avgScore: stats.total > 0 ? (stats.correct / stats.total) * 100 : 0
-        })).sort((a,b) => b.popularity - a.popularity);
+        return Object.entries(examStats).map(([name, stats]) => {
+            const totalQuizzes = stats.quizzes.length;
+            const avgScore = totalQuizzes > 0 ? stats.quizzes.reduce((sum, q) => sum + q.percentage, 0) / totalQuizzes : 0;
+            const passRate = totalQuizzes > 0 ? (stats.quizzes.filter(q => q.percentage >= 70).length / totalQuizzes) * 100 : 0;
+            return { name, popularity: totalQuizzes, avgScore, passRate };
+        }).sort((a,b) => b.popularity - a.popularity);
     }, [users]);
-    
+
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-6">
-                {/* Stat Cards */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <StatCard title="Total Users" value={totalUsers.toString()} />
-                    <StatCard title="Active Users (7d)" value={activeUsers.toString()} />
-                    <StatCard title="Quizzes Today" value={quizzesToday.toString()} />
-                    <StatCard title="Specialists" value={(subscriptionCounts['Specialist'] || 0).toString()} />
-                </div>
-                {/* Exam Performance Chart */}
-                <div className="bg-white p-6 rounded-lg shadow-md">
+        <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                <div>{/* Placeholder for potential title */}</div>
+                <QuickActions onNav={onQuickNav}/>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                <StatCard title="Total Users" value={stats.totalUsers.value.toString()} trend={stats.totalUsers.trend} trendPeriod="vs last month" />
+                <StatCard title="Active Users (7d)" value={stats.activeUsers.value.toString()} trend={stats.activeUsers.trend} trendPeriod="vs last week" />
+                <StatCard title="New Signups (30d)" value={stats.newSignups.value.toString()} />
+                <StatCard title="Quizzes Today" value={stats.quizzesToday.toString()} />
+                <SubscriptionDonutCard counts={stats.subscriptionCounts} />
+            </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                 <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow-md">
                      <h3 className="text-lg font-semibold text-gray-700 mb-4">Exam Popularity & Performance</h3>
-                     <ExamPerformanceChart data={examPerformance} />
+                     <ExamPerformanceChart data={examPerformance} onBarClick={onExamChartClick} />
+                 </div>
+                 <div className="bg-white p-6 rounded-lg shadow-md">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-semibold text-gray-700">Real-Time Activity Feed</h3>
+                        <select value={activityFilter} onChange={e => setActivityFilter(e.target.value as any)} className="text-xs p-1 border rounded-md">
+                            <option value="all">All</option>
+                            <option value="login">Logins</option>
+                            <option value="upgrade">Upgrades</option>
+                            <option value="quiz_complete">Quiz Completions</option>
+                        </select>
+                    </div>
+                    <ActivityFeed feed={filteredActivity} />
                 </div>
             </div>
-             {/* Activity Feed */}
             <div className="bg-white p-6 rounded-lg shadow-md">
-                <h3 className="text-lg font-semibold text-gray-700 mb-4">Real-Time Activity Feed</h3>
-                <ActivityFeed feed={activityFeed} />
+                <h3 className="text-lg font-semibold text-gray-700 mb-4">User Growth Trajectory (90d)</h3>
+                <UserGrowthChart data={userGrowthData} />
             </div>
         </div>
     );
 };
 
-const UserManagementTab: React.FC<{ allUsers: User[], setAllUsers: React.Dispatch<React.SetStateAction<User[]>>, currentUser: User, onImpersonate: (user: User) => void, activityFeed: ActivityEvent[] }> = ({ allUsers, setAllUsers, currentUser, onImpersonate, activityFeed }) => {
+const QuickActions: React.FC<{onNav: (tab: Tab) => void}> = ({onNav}) => {
+    const [isOpen, setIsOpen] = useState(false);
+
+    const handleAction = (action: () => void) => {
+        action();
+        setIsOpen(false);
+    }
+    
+    // Placeholder for Add User Modal trigger - would be handled in UserManagementTab
+    const addUser = () => alert("Navigate to 'User Management' to add a user.");
+    const createAnnouncement = () => onNav('announcements');
+    const exportData = () => alert("Navigate to 'User Management' to export data.");
+
+
+    return (
+        <div className="relative">
+            <button onClick={() => setIsOpen(!isOpen)} className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg font-semibold hover:bg-gray-100 flex items-center gap-2">
+                Quick Actions <span className={`transition-transform ${isOpen ? 'rotate-180' : ''}`}>▼</span>
+            </button>
+            {isOpen && (
+                <div className="origin-top-right absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-10">
+                    <div className="py-1">
+                        <a href="#" onClick={(e) => { e.preventDefault(); handleAction(addUser) }} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">+ Add New User</a>
+                        <a href="#" onClick={(e) => { e.preventDefault(); handleAction(createAnnouncement) }} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Create Announcement</a>
+                        <a href="#" onClick={(e) => { e.preventDefault(); handleAction(exportData) }} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Export All User Data</a>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+const StatCard: React.FC<{ title: string; value: string; trend?: number, trendPeriod?: string }> = ({ title, value, trend, trendPeriod }) => {
+    const trendColor = trend && trend >= 0 ? 'text-green-600' : 'text-red-600';
+    const trendIcon = trend && trend >= 0 ? '▲' : '▼';
+    
+    return (
+        <div className="bg-white p-4 rounded-lg shadow-md text-center">
+            <p className="text-sm text-gray-500 truncate">{title}</p>
+            <p className="text-3xl font-bold text-gray-800 my-1">{value}</p>
+            {trend !== undefined ? (
+                <p className={`text-xs font-semibold ${trendColor}`}>{trendIcon} {Math.abs(trend).toFixed(1)}% <span className="font-normal text-gray-400">{trendPeriod}</span></p>
+            ) : (
+                <p className="text-xs">&nbsp;</p> 
+            )}
+        </div>
+    );
+};
+
+
+const SubscriptionDonutCard: React.FC<{ counts: Record<string, number> }> = ({ counts }) => {
+    const chartRef = useRef<HTMLCanvasElement>(null);
+    const chartInstance = useRef<any>(null);
+
+    useEffect(() => {
+        if (chartInstance.current) chartInstance.current.destroy();
+        if (chartRef.current && (window as any).Chart) {
+            const ctx = chartRef.current.getContext('2d');
+            if (ctx) {
+                // FIX: Add explicit types to reduce function parameters
+                const total = Object.values(counts).reduce((a: number, b: number) => a + b, 0);
+                chartInstance.current = new (window as any).Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: Object.keys(counts),
+                        datasets: [{
+                            data: Object.values(counts),
+                            backgroundColor: ['#D1D5DB', '#60A5FA', '#34D399'], // gray, blue, green
+                            borderWidth: 0,
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        cutout: '70%',
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: { enabled: true }
+                        }
+                    }
+                });
+            }
+        }
+    }, [counts]);
+    
+    // FIX: Add explicit types to reduce function parameters
+    const total = Object.values(counts).reduce((a: number, b: number) => a + b, 0);
+
+    return (
+        <div className="bg-white p-4 rounded-lg shadow-md text-center flex flex-col justify-between">
+            <p className="text-sm text-gray-500">Subscription Breakdown</p>
+            <div className="relative w-24 h-24 mx-auto my-2">
+                <canvas ref={chartRef}></canvas>
+                <div className="absolute inset-0 flex items-center justify-center">
+                     <span className="text-2xl font-bold">{total}</span>
+                </div>
+            </div>
+             <div className="flex justify-center gap-2 text-xs">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-300"></span>Cadet: {counts.Cadet || 0}</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400"></span>Pro: {counts.Professional || 0}</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span>Spec: {counts.Specialist || 0}</span>
+            </div>
+        </div>
+    );
+};
+
+const UserGrowthChart: React.FC<{data: { labels: string[], data: number[] }}> = ({ data }) => {
+    const chartRef = useRef<HTMLCanvasElement>(null);
+    const chartInstance = useRef<any>(null);
+    useEffect(() => {
+        if (chartInstance.current) chartInstance.current.destroy();
+        if (chartRef.current && (window as any).Chart) {
+            const ctx = chartRef.current.getContext('2d');
+            if (ctx) {
+                 chartInstance.current = new (window as any).Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.labels,
+                        datasets: [{
+                            label: 'Total Users',
+                            data: data.data,
+                            fill: true,
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            borderColor: 'rgba(59, 130, 246, 1)',
+                            tension: 0.1,
+                            pointRadius: 0,
+                        }]
+                    },
+                    options: { 
+                        scales: { x: { display: false }, y: { beginAtZero: false } }, 
+                        plugins: { legend: { display: false } }
+                    }
+                });
+            }
+        }
+    }, [data]);
+
+    return <canvas ref={chartRef} height="80"></canvas>;
+}
+
+
+const UserManagementTab: React.FC<{ allUsers: User[], setAllUsers: React.Dispatch<React.SetStateAction<User[]>>, currentUser: User, onImpersonate: (user: User) => void, activityFeed: ActivityEvent[], initialFilter: {type: 'exam', value: string} | null }> = ({ allUsers, setAllUsers, currentUser, onImpersonate, activityFeed, initialFilter }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filter, setFilter] = useState('All');
     const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
@@ -172,6 +390,14 @@ const UserManagementTab: React.FC<{ allUsers: User[], setAllUsers: React.Dispatc
     const [openActionMenu, setOpenActionMenu] = useState<string | null>(null);
     const [viewingUserActivity, setViewingUserActivity] = useState<User | null>(null);
     const [pendingPasswordReset, setPendingPasswordReset] = useState<User | null>(null);
+
+    useEffect(() => {
+        if (initialFilter?.type === 'exam') {
+            const usersWithExam = allUsers.filter(u => u.history.some(h => h.examName === initialFilter.value)).map(u => u.email).join(',');
+            setSearchTerm(usersWithExam);
+        }
+    }, [initialFilter, allUsers]);
+
 
     const filteredUsers = useMemo(() => {
         return allUsers
@@ -184,7 +410,7 @@ const UserManagementTab: React.FC<{ allUsers: User[], setAllUsers: React.Dispatc
             if (['ADMIN', 'SUB_ADMIN', 'USER'].includes(filter)) return user.role === filter;
             return user.subscriptionTier === filter;
           })
-          .sort((a,b) => a.createdAt - b.createdAt);
+          .sort((a,b) => b.createdAt - a.createdAt);
     }, [allUsers, searchTerm, filter]);
 
     const handleUserAdd = async (newUser: any) => {
@@ -368,12 +594,6 @@ const UserActivityModal: React.FC<{ user: User, allActivity: ActivityEvent[], on
     )
 }
 
-const StatCard: React.FC<{ title: string; value: string; }> = ({ title, value }) => (
-    <div className="bg-white p-4 rounded-lg shadow-md text-center">
-        <p className="text-sm text-gray-500">{title}</p>
-        <p className="text-2xl font-bold text-gray-800">{value}</p>
-    </div>
-);
 
 const ActivityFeed: React.FC<{ feed: ActivityEvent[] }> = ({ feed }) => {
     const timeSince = (date: number) => {
@@ -413,7 +633,7 @@ const ActivityFeed: React.FC<{ feed: ActivityEvent[] }> = ({ feed }) => {
     );
 };
 
-const ExamPerformanceChart: React.FC<{ data: { name: string; popularity: number; avgScore: number }[] }> = ({ data }) => {
+const ExamPerformanceChart: React.FC<{ data: { name: string; popularity: number; avgScore: number, passRate: number }[], onBarClick: (examName: string) => void }> = ({ data, onBarClick }) => {
     const chartRef = useRef<HTMLCanvasElement>(null);
     const chartInstance = useRef<any>(null);
 
@@ -445,12 +665,23 @@ const ExamPerformanceChart: React.FC<{ data: { name: string; popularity: number;
                     options: {
                         indexAxis: 'y',
                         scales: { x: { beginAtZero: true, title: { display: true, text: 'Number of Quizzes Taken' } } },
+                        onClick: (e: any) => {
+                            const activePoints = chartInstance.current.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
+                            if (activePoints.length) {
+                                const firstPoint = activePoints[0];
+                                const label = chartInstance.current.data.labels[firstPoint.index];
+                                onBarClick(label);
+                            }
+                        },
                         plugins: {
                             legend: { display: false },
                             tooltip: {
                                 callbacks: {
                                     label: (c: any) => `Quizzes Taken: ${c.raw}`,
-                                    afterLabel: (c: any) => `Avg. Score: ${data[c.dataIndex].avgScore.toFixed(1)}%`
+                                    afterLabel: (c: any) => [
+                                        `Avg. Score: ${data[c.dataIndex].avgScore.toFixed(1)}%`,
+                                        `Pass Rate: ${data[c.dataIndex].passRate.toFixed(1)}%`
+                                    ]
                                 }
                             }
                         }
@@ -461,7 +692,7 @@ const ExamPerformanceChart: React.FC<{ data: { name: string; popularity: number;
         return () => {
             if (chartInstance.current) chartInstance.current.destroy();
         };
-    }, [data]);
+    }, [data, onBarClick]);
     
     if (data.length === 0) {
         return <p className="text-center text-gray-500">No quiz data available to display.</p>
