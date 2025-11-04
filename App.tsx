@@ -116,11 +116,11 @@ const App: React.FC = () => {
     };
 
 
-    const goHome = useCallback(() => {
+    const goHome = () => {
         setView('home');
         setError('');
         setQuizResult(null);
-    }, []);
+    };
 
     const handleLoginSuccess = async (loggedInUser: User) => {
         setUser(loggedInUser);

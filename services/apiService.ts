@@ -273,8 +273,8 @@ const api = {
         return newResult;
     },
     
-    saveInProgressQuiz: async (userId: string, progress: InProgressQuizState): Promise<void> => {
-        await api.updateUser(userId, { inProgressQuiz: progress });
+    saveInProgressQuiz: async (userId: string, progress: InProgressQuizState): Promise<User> => {
+        return await api.updateUser(userId, { inProgressQuiz: progress });
     },
     
     clearInProgressQuiz: async (userId: string): Promise<User> => {

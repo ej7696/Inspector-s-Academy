@@ -18,7 +18,7 @@ interface Props {
 const ExamScreen: React.FC<Props> = ({
   questions, quizSettings, currentIndex, answers, onSelectAnswer, onNavigate, onToggleFlag, onToggleStrikethrough, onSubmit, onSaveAndExit
 }) => {
-  const [isNavigatorVisible, setIsNavigatorVisible] = useState(true);
+  const [isNavigatorVisible, setIsNavigatorVisible] = useState(false);
   const [timeLeft, setTimeLeft] = useState(quizSettings.numQuestions * 90); // 1.5 mins per question
   const [showExplanation, setShowExplanation] = useState(false);
 
@@ -70,10 +70,6 @@ const ExamScreen: React.FC<Props> = ({
   const getQuestionStatusClass = (index: number) => {
     const answer = answers[index];
     
-    if (answer?.flagged) {
-      return 'bg-yellow-100 border-yellow-500 text-yellow-800 hover:bg-yellow-200';
-    }
-    
     if (answer?.userAnswer) {
       const question = questions[index];
       const isCorrect = question.answer === answer.userAnswer;
@@ -82,6 +78,10 @@ const ExamScreen: React.FC<Props> = ({
       } else {
         return 'bg-red-100 border-red-500 text-red-800 hover:bg-red-200';
       }
+    }
+    
+    if (answer?.flagged) {
+      return 'bg-yellow-100 border-yellow-500 text-yellow-800 hover:bg-yellow-200';
     }
     
     return 'bg-white border-gray-400 text-gray-800 hover:bg-gray-200';
@@ -108,40 +108,53 @@ const ExamScreen: React.FC<Props> = ({
   return (
     <div className="flex flex-col h-screen bg-gray-100 font-sans">
       {/* Top Bar */}
-      <header className="flex items-center justify-between p-3 bg-white shadow-md text-gray-800 z-10 flex-shrink-0">
+      <header className="flex items-center justify-between p-3 bg-white shadow-md text-gray-800 z-20 flex-shrink-0">
         <div className="flex items-center gap-4">
           <button onClick={() => setIsNavigatorVisible(!isNavigatorVisible)} className="p-2 rounded-md hover:bg-gray-200" title="Toggle Navigator">
             <NavigatorIcon />
           </button>
           <div>
-            <h1 className="text-xl font-bold">{quizSettings.examName}</h1>
+            <h1 className="text-lg sm:text-xl font-bold truncate max-w-[150px] sm:max-w-xs">{quizSettings.examName}</h1>
             <p className="text-sm text-gray-500">Question {currentIndex + 1} of {questions.length}</p>
           </div>
         </div>
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-2 sm:gap-6">
           {quizSettings.isTimed && (
-            <div className={`flex items-center gap-2 font-mono text-lg font-semibold ${timeLeft < 300 ? 'text-red-600' : 'text-gray-800'}`}>
+            <div className={`flex items-center gap-2 font-mono text-base sm:text-lg font-semibold ${timeLeft < 300 ? 'text-red-600' : 'text-gray-800'}`}>
               <ClockIcon />
-              <span>{formatTime(timeLeft)}</span>
+              <span className="hidden sm:inline">{formatTime(timeLeft)}</span>
             </div>
           )}
-          <button onClick={() => onSaveAndExit(timeLeft)} className="flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-red-600 p-2 rounded-md hover:bg-red-100 mr-3" title="Save and go Home">
+          <button onClick={() => onSaveAndExit(timeLeft)} className="flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-red-600 p-2 rounded-md hover:bg-red-100" title="Save and go Home">
             <ExitIcon className="w-5 h-5"/>
-            <span>Home</span>
+            <span className="hidden sm:inline">Home</span>
           </button>
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative">
+        {/* Backdrop for mobile */}
+        {isNavigatorVisible && (
+            <div
+                onClick={() => setIsNavigatorVisible(false)}
+                className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-20"
+                aria-hidden="true"
+            ></div>
+        )}
         {/* Question Navigator */}
-        <aside className={`bg-gray-100 border-r border-gray-300 transition-all duration-300 flex-shrink-0 ${isNavigatorVisible ? 'w-28' : 'w-0'}`}>
-            <div className={`p-2 transition-opacity duration-200 overflow-hidden h-full flex flex-col ${isNavigatorVisible ? 'opacity-100' : 'opacity-0'}`}>
+        <aside className={`fixed lg:relative inset-y-0 left-0 bg-gray-100 border-r border-gray-300 transition-transform duration-300 ease-in-out z-30
+            ${isNavigatorVisible ? 'translate-x-0' : '-translate-x-full'}
+            lg:translate-x-0 lg:static w-64 lg:w-28 flex-shrink-0`}>
+            <div className="p-2 overflow-hidden h-full flex flex-col">
                 <div className="flex-grow overflow-y-auto">
-                    <div className="grid grid-cols-1 gap-2 justify-items-center py-2">
+                    <div className="grid grid-cols-2 lg:grid-cols-1 gap-2 justify-items-center py-2">
                         {questions.map((_, index) => (
                             <button
                                 key={index}
-                                onClick={() => onNavigate(index)}
+                                onClick={() => {
+                                    onNavigate(index);
+                                    setIsNavigatorVisible(false);
+                                }}
                                 className={`w-10 h-10 rounded-md border font-bold text-sm transition-colors flex items-center justify-center
                                   ${getQuestionStatusClass(index)}
                                   ${index === currentIndex ? 'ring-2 ring-offset-1 ring-blue-500' : ''}`
@@ -156,9 +169,9 @@ const ExamScreen: React.FC<Props> = ({
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 flex flex-col p-4 md:p-8 overflow-y-auto">
-          <div className="bg-white p-6 md:p-8 rounded-lg shadow-xl w-full max-w-4xl mx-auto flex-grow flex flex-col">
-            <div className="text-lg md:text-xl text-gray-800 mb-6 flex-grow whitespace-pre-wrap">{currentQuestion.question}</div>
+        <main className="flex-1 flex flex-col p-3 sm:p-4 md:p-8 overflow-y-auto">
+          <div className="bg-white p-4 sm:p-6 md:p-8 rounded-lg shadow-xl w-full max-w-4xl mx-auto flex-grow flex flex-col">
+            <div className="text-lg md:text-xl text-gray-800 mb-4 whitespace-pre-wrap">{currentQuestion.question}</div>
             
             <div className="space-y-4">
               {(!currentQuestion.type || currentQuestion.type === 'multiple-choice') && currentQuestion.options?.map((option, index) => {
@@ -167,7 +180,7 @@ const ExamScreen: React.FC<Props> = ({
                   <div key={index} className="flex items-center gap-2">
                     <button 
                       onClick={() => onToggleStrikethrough(option)}
-                      className="p-1 rounded-full hover:bg-gray-200"
+                      className="p-1 rounded-full hover:bg-gray-200 flex-shrink-0"
                       title={`Strikethrough option ${String.fromCharCode(65 + index)}`}
                       disabled={isAnswered}
                     >
@@ -176,7 +189,7 @@ const ExamScreen: React.FC<Props> = ({
                     <button
                       onClick={() => !isAnswered && onSelectAnswer(option)}
                       disabled={isAnswered || isStruck}
-                      className={`p-4 rounded-lg border-2 text-left w-full transition-colors duration-200 
+                      className={`p-3 sm:p-4 rounded-lg border-2 text-left w-full transition-colors duration-200 text-sm sm:text-base
                         ${isStruck ? 'line-through text-gray-400 bg-gray-100' : getOptionClasses(option)}`}
                     >
                       <span className="font-semibold mr-2">{String.fromCharCode(65 + index)}.</span> {option}
@@ -203,7 +216,7 @@ const ExamScreen: React.FC<Props> = ({
                       <svg className={`w-5 h-5 ml-1 transition-transform ${showExplanation ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                   </button>
                   {showExplanation && (
-                      <div className="space-y-4 pt-4 border-t text-gray-700">
+                      <div className="space-y-4 pt-4 border-t text-gray-700 text-sm sm:text-base">
                           {currentQuestion.reference && <p><strong className="font-semibold">Reference:</strong> {currentQuestion.reference}</p>}
                           {currentQuestion.explanation && <p><strong className="font-semibold">Rationale:</strong> {currentQuestion.explanation}</p>}
                       </div>
@@ -216,21 +229,21 @@ const ExamScreen: React.FC<Props> = ({
           {/* Bottom Navigation */}
           <footer className="flex-shrink-0 pt-6">
             <div className="flex justify-between items-center w-full max-w-4xl mx-auto">
-              <button onClick={() => onNavigate('prev')} disabled={currentIndex === 0} className="flex items-center gap-2 bg-white text-gray-700 px-4 py-2 rounded-lg font-semibold hover:bg-gray-200 transition-colors disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed shadow">
+              <button onClick={() => onNavigate('prev')} disabled={currentIndex === 0} className="flex items-center gap-2 bg-white text-gray-700 px-3 py-2 sm:px-4 rounded-lg font-semibold hover:bg-gray-200 transition-colors disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed shadow">
                 <PreviousIcon />
-                Previous
+                <span className="hidden sm:inline">Previous</span>
               </button>
-              <button onClick={onToggleFlag} className="flex items-center gap-2 bg-white text-gray-700 px-4 py-2 rounded-lg font-semibold hover:bg-gray-200 transition-colors shadow">
+              <button onClick={onToggleFlag} className="flex items-center gap-2 bg-white text-gray-700 px-3 py-2 sm:px-4 rounded-lg font-semibold hover:bg-gray-200 transition-colors shadow">
                 <FlagIcon flagged={currentAnswer?.flagged} />
-                {currentAnswer?.flagged ? 'Unflag' : 'Flag for Review'}
+                <span className="hidden sm:inline">{currentAnswer?.flagged ? 'Unflag' : 'Flag'}</span>
               </button>
               {currentIndex === questions.length - 1 ? (
-                <button onClick={onSubmit} className="bg-green-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors shadow-lg">
+                <button onClick={onSubmit} className="bg-green-600 text-white px-4 py-2 sm:px-6 rounded-lg font-semibold hover:bg-green-700 transition-colors shadow-lg">
                   Review & Submit
                 </button>
               ) : (
-                <button onClick={() => onNavigate('next')} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors shadow">
-                  Next
+                <button onClick={() => onNavigate('next')} className="flex items-center gap-2 bg-blue-600 text-white px-3 py-2 sm:px-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors shadow">
+                  <span className="hidden sm:inline">Next</span>
                   <NextIcon />
                 </button>
               )}
