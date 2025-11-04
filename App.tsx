@@ -176,6 +176,13 @@ const App: React.FC = () => {
     
     const initiateQuizFlow = async (examName: string, numQuestions: number, isTimed: boolean, topics?: string) => {
         if (!user) return;
+    
+        // Cadet user check for quiz length
+        if (user.subscriptionTier === 'Cadet' && numQuestions > 5) {
+            setView('paywall');
+            return;
+        }
+
         const isPaidUser = user.subscriptionTier !== 'Cadet';
         const isUnlocked = user.unlockedExams.includes(examName);
     
@@ -196,8 +203,14 @@ const App: React.FC = () => {
             return;
         }
     
+        // For Cadets starting a free preview OR paid users starting an unlocked exam
         setQuizSettings({ examName, numQuestions, isTimed, examMode: 'open', topics: topics?.trim() });
-        setView('exam_mode_selection');
+        
+        if (user.subscriptionTier === 'Cadet') {
+            startQuiz(); // Bypass mode selection for Cadets
+        } else {
+            setView('exam_mode_selection');
+        }
     };
 
     const startQuiz = async () => {
@@ -210,6 +223,13 @@ const App: React.FC = () => {
             // In a real scenario, for a 170-question exam, you'd likely fetch this from a pre-generated pool
             // or generate it in chunks. For this simulation, we'll generate a smaller set.
             const finalNumQuestions = Math.min(quizSettings.numQuestions, 170);
+
+            // Paywall logic for Cadet tier
+            if (user.subscriptionTier === 'Cadet' && questions.length >= 5) {
+                setView('paywall');
+                setIsLoading(false);
+                return;
+            }
 
             const newQuestions = await api.generateQuiz({...quizSettings, numQuestions: finalNumQuestions});
             setQuestions(newQuestions);
@@ -262,13 +282,18 @@ const App: React.FC = () => {
     };
     
     const handleNavigate = (destination: 'next' | 'prev' | number) => {
+        if (user?.subscriptionTier === 'Cadet' && currentQuestionIndex >= 4) {
+            setView('paywall');
+            return;
+        }
+
         if (destination === 'next') {
             if (currentQuestionIndex < questions.length - 1) {
                 setCurrentQuestionIndex(prev => prev + 1);
             }
         } else if (destination === 'prev') {
             if (currentQuestionIndex > 0) {
-                setCurrentQuestionIndex(prev => prev - 1);
+                setCurrentQuestionIndex(prev => prev + 1);
             }
         } else {
             if (destination >= 0 && destination < questions.length) {
@@ -280,9 +305,10 @@ const App: React.FC = () => {
     const handleToggleFlag = () => {
         setCurrentQuizAnswers(prev => {
             const newAnswers = [...prev];
+            const currentAnswerState = newAnswers[currentQuestionIndex] || { userAnswer: null, flagged: false, strikethroughOptions: [] };
             newAnswers[currentQuestionIndex] = {
-                ...newAnswers[currentQuestionIndex],
-                flagged: !newAnswers[currentQuestionIndex].flagged,
+                ...currentAnswerState,
+                flagged: !currentAnswerState.flagged,
             };
             return newAnswers;
         });
@@ -516,6 +542,7 @@ const App: React.FC = () => {
                         answers={currentQuizAnswers}
                         onSelectAnswer={handleSelectAnswer}
                         onNavigate={handleNavigate}
+                        // Fix: Corrected prop value from `onToggleFlag` to `handleToggleFlag`.
                         onToggleFlag={handleToggleFlag}
                         onToggleStrikethrough={handleToggleStrikethrough}
                         onSubmit={() => setIsReviewing(true)}
@@ -545,7 +572,8 @@ const App: React.FC = () => {
                 return user && <Paywall
                     user={user}
                     onUpgrade={async (tier) => {
-                        await handleUpdateUser({ subscriptionTier: tier });
+                        await handleUpdateUser({ subscriptionTier: tier, subscriptionExpiresAt: Date.now() + 4 * 30 * 24 * 60 * 60 * 1000 });
+                        await api.logActivity(user.id, 'upgrade', `Upgraded to ${tier} plan.`);
                         setView('home');
                     }}
                     onCancel={goHome} 
@@ -554,7 +582,10 @@ const App: React.FC = () => {
                 return user && <Dashboard 
                     user={user} 
                     onGoHome={goHome} 
-                    onStartWeaknessQuiz={(topics) => initiateQuizFlow(user.unlockedExams[0], 20, false, topics)}
+                    onStartWeaknessQuiz={(topics) => {
+                      const examName = user.unlockedExams[0] || 'API 510 - Pressure Vessel Inspector';
+                      initiateQuizFlow(examName, 10, false, topics);
+                    }}
                 />;
             case 'profile':
                 return user && <UserProfile
@@ -630,6 +661,16 @@ const App: React.FC = () => {
                     buttons={[
                         { text: 'Try Again', onClick: () => { setQuizGenerationError(null); startQuiz(); }, style: 'primary' },
                         { text: 'Back to Home', onClick: () => { setQuizGenerationError(null); goHome(); }, style: 'neutral' }
+                    ]}
+                />
+            )}
+            {isIdleWarningVisible && (
+                <InfoDialog
+                    open={true}
+                    title="Are you still there?"
+                    message={`Your session will automatically be saved and you will be returned to the homepage in ${idleCountdown} seconds due to inactivity.`}
+                    buttons={[
+                        { text: "I'm still here", onClick: handleUserActivity, style: 'primary' },
                     ]}
                 />
             )}

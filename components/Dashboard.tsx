@@ -36,7 +36,7 @@ const CadetDashboard: React.FC<{ user: User, onGoHome: () => void }> = ({ user, 
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold text-gray-800">Your Starting Point</h1>
                  <button onClick={onGoHome} className="bg-blue-500 text-white px-5 py-2 rounded-lg font-semibold hover:bg-blue-600 transition-colors">
-                    &larr; Back to Home
+                    Start Your First Practice Quiz
                 </button>
             </div>
             
@@ -48,12 +48,12 @@ const CadetDashboard: React.FC<{ user: User, onGoHome: () => void }> = ({ user, 
             <div className="relative bg-white border border-gray-200 rounded-lg p-6 shadow-md text-center">
                 <div className="filter blur-sm pointer-events-none">
                      <h2 className="text-2xl font-bold text-gray-400 mb-4">Performance Analytics</h2>
-                     <p className="text-gray-400">Placeholder for charts and graphs...</p>
+                     <p className="text-gray-400">Track your progress, pinpoint weaknesses, and review unlimited history.</p>
                      <div className="h-40 w-full bg-gray-200 mt-4 rounded-md"></div>
                 </div>
                 <div className="absolute inset-0 bg-white bg-opacity-80 flex flex-col items-center justify-center p-4">
                     <h3 className="text-2xl font-bold text-gray-800 mb-2">Unlock Your Performance Analytics</h3>
-                    <p className="text-gray-600 mb-4">Upgrade to Professional to pinpoint your weaknesses, track your progress, and access unlimited quiz history.</p>
+                    <p className="text-gray-600 mb-4 max-w-md">Upgrade to a paid plan to unlock weakness analysis, performance trend charts, and unlimited quiz history.</p>
                     <button onClick={onGoHome} className="bg-green-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors">
                         View Upgrade Options
                     </button>
@@ -61,7 +61,7 @@ const CadetDashboard: React.FC<{ user: User, onGoHome: () => void }> = ({ user, 
             </div>
 
             <div className="mt-8">
-                 <h2 className="text-2xl font-bold text-gray-800 mb-4">Recent Attempts</h2>
+                 <h2 className="text-2xl font-bold text-gray-800 mb-4">Last 3 Attempts</h2>
                  {user.history.length === 0 ? (
                     <p className="text-center text-gray-500 py-4 bg-white rounded-lg shadow-md">You haven't completed any quizzes yet.</p>
                  ) : (
@@ -93,7 +93,8 @@ const ProfessionalDashboard: React.FC<{ user: User, onGoHome: () => void, onStar
         if (examHistory.length === 0) return 0;
         const avgScore = examHistory.reduce((acc, h) => acc + h.percentage, 0) / examHistory.length;
         const mostRecentScore = examHistory[examHistory.length - 1].percentage;
-        return (avgScore * 0.6) + (mostRecentScore * 0.4);
+        // Give more weight to the most recent score
+        return (avgScore * 0.4) + (mostRecentScore * 0.6);
     }, [examHistory]);
 
     const weaknessAnalysis = useMemo(() => {
@@ -115,19 +116,20 @@ const ProfessionalDashboard: React.FC<{ user: User, onGoHome: () => void, onStar
     }, [examHistory]);
 
      const performanceTrend = useMemo(() => {
-        if (examHistory.length < 2) return null;
+        const examSpecificHistory = examHistory.filter(h => h.examName === unlockedExam);
+        if (examSpecificHistory.length < 2) return null;
         return {
-            labels: examHistory.map(r => new Date(r.date).toLocaleDateString()),
-            scores: examHistory.map(r => r.percentage)
+            labels: examSpecificHistory.map(r => new Date(r.date).toLocaleDateString()),
+            scores: examSpecificHistory.map(r => r.percentage)
         };
-    }, [examHistory]);
+    }, [examHistory, unlockedExam]);
 
     return (
         <div className="max-w-6xl mx-auto p-4 md:p-6">
             <div className="flex justify-between items-center mb-6">
                 <div>
                     <h1 className="text-3xl font-bold text-gray-800">Exam Command Center</h1>
-                    <p className="text-gray-500">Welcome back, {user.fullName || user.email}!</p>
+                    <p className="text-gray-500">Welcome back, {user.fullName || user.email}! You are <span className="font-semibold">{readinessScore.toFixed(0)}%</span> ready for the {unlockedExam} exam. Let's close the gap.</p>
                 </div>
                  <button onClick={onGoHome} className="bg-blue-500 text-white px-5 py-2 rounded-lg font-semibold hover:bg-blue-600 transition-colors">
                     &larr; Back to Home
@@ -193,7 +195,7 @@ const SpecialistDashboard: React.FC<{ user: User, onGoHome: () => void, onStartW
             if (examHistory.length === 0) return { examName, score: 0 };
             const avgScore = examHistory.reduce((acc, h) => acc + h.percentage, 0) / examHistory.length;
             const mostRecentScore = examHistory.sort((a,b) => b.date - a.date)[0].percentage;
-            return { examName, score: (avgScore * 0.6) + (mostRecentScore * 0.4) };
+            return { examName, score: (avgScore * 0.4) + (mostRecentScore * 0.6) };
         });
     }, [user.history, user.unlockedExams]);
 
@@ -217,7 +219,7 @@ const SpecialistDashboard: React.FC<{ user: User, onGoHome: () => void, onStartW
     }, [user.history]);
 
     const smartRecommendation = useMemo(() => {
-        if (readinessScores.length < 2) return null;
+        if (readinessScores.length < 2) return "Unlock another exam to get strategic recommendations.";
         const sorted = [...readinessScores].sort((a,b) => a.score - b.score);
         if (sorted[0].score < 85) {
             return `Your readiness for ${sorted[0].examName} is lowest. We recommend focusing there to close the gap.`;
@@ -241,16 +243,20 @@ const SpecialistDashboard: React.FC<{ user: User, onGoHome: () => void, onStartW
                 {/* Mastery Overview */}
                 <div className="bg-white p-6 rounded-lg shadow-md">
                     <h2 className="text-xl font-semibold text-gray-700 mb-4">Mastery Overview</h2>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        {readinessScores.map(({examName, score}) => (
-                            <div key={examName} className="text-center p-4 bg-gray-50 rounded-lg">
-                                 <h3 className="font-semibold text-gray-800 mb-2 truncate" title={examName}>{examName}</h3>
-                                 <ProgressRing score={score} />
-                            </div>
-                        ))}
-                    </div>
+                    {user.unlockedExams.length > 0 ? (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {readinessScores.map(({examName, score}) => (
+                                <div key={examName} className="text-center p-4 bg-gray-50 rounded-lg">
+                                    <h3 className="font-semibold text-gray-800 mb-2 truncate" title={examName}>{examName}</h3>
+                                    <ProgressRing score={score} />
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                         <p className="text-center text-gray-500 py-4">Unlock an exam to see your mastery overview.</p>
+                    )}
                      <div className="text-right text-sm text-gray-500 mt-4">
-                        Slots Used: {user.unlockedExams.length} / 2
+                        Slots Used: {user.unlockedExams.length} / 2 | <a href="#" onClick={onGoHome} className="text-blue-600 hover:underline">Unlock More</a>
                     </div>
                 </div>
 
@@ -258,13 +264,13 @@ const SpecialistDashboard: React.FC<{ user: User, onGoHome: () => void, onStartW
                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {smartRecommendation && (
                          <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-indigo-500">
-                             <h2 className="text-xl font-semibold text-gray-700 mb-2">Next Steps</h2>
+                             <h2 className="text-xl font-semibold text-gray-700 mb-2">Smart Recommendation</h2>
                              <p className="text-gray-600">{smartRecommendation}</p>
                          </div>
                     )}
                     {crossExamWeakness.length > 0 && (
                         <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-red-500">
-                             <h2 className="text-xl font-semibold text-gray-700 mb-2">Cross-Exam Weakness</h2>
+                             <h2 className="text-xl font-semibold text-gray-700 mb-2">Cross-Exam Weakness Analysis</h2>
                              <p className="text-sm text-gray-500 mb-3">Topics you struggle with across multiple certifications.</p>
                              <ul className="space-y-2">
                                  {crossExamWeakness.map(({category, accuracy}) => (
