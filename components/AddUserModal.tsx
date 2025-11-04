@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { User } from '../types';
+import { User, Role } from '../types';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  onAddUser: (newUser: Omit<User, 'id' | 'subscriptionTier' | 'unlockedExams' | 'history' | 'inProgressQuiz' | 'role' | 'createdAt' | 'lastActive'>) => Promise<void>;
+  onAddUser: (newUser: Omit<User, 'id' | 'subscriptionTier' | 'unlockedExams' | 'history' | 'inProgressQuiz' | 'createdAt' | 'lastActive'>) => Promise<void>;
 }
 
 const AddUserModal: React.FC<Props> = ({ isOpen, onClose, onAddUser }) => {
@@ -12,6 +12,7 @@ const AddUserModal: React.FC<Props> = ({ isOpen, onClose, onAddUser }) => {
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [password, setPassword] = useState('');
+  const [role, setRole] = useState<Role>('USER');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -24,8 +25,14 @@ const AddUserModal: React.FC<Props> = ({ isOpen, onClose, onAddUser }) => {
     }
     setIsLoading(true);
     try {
-      await onAddUser({ fullName, email, phoneNumber, password });
-      onClose(); // Close modal on success
+      await onAddUser({ fullName, email, phoneNumber, password, role });
+      // Reset form on success before closing
+      setFullName('');
+      setEmail('');
+      setPhoneNumber('');
+      setPassword('');
+      setRole('USER');
+      onClose();
     } catch (err: any) {
       setError(err.message || 'Failed to add user.');
     } finally {
@@ -40,7 +47,7 @@ const AddUserModal: React.FC<Props> = ({ isOpen, onClose, onAddUser }) => {
       <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-md animate-fade-in-up">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold text-gray-800">Add New User</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">&times;</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -81,6 +88,18 @@ const AddUserModal: React.FC<Props> = ({ isOpen, onClose, onAddUser }) => {
               className="w-full mt-1 p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
               required
             />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Role</label>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value as Role)}
+              className="w-full mt-1 p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="USER">User</option>
+              <option value="SUB_ADMIN">Sub-Admin</option>
+              <option value="ADMIN">Admin</option>
+            </select>
           </div>
           {error && <p className="text-red-500 text-sm">{error}</p>}
           <div className="flex justify-end gap-4 pt-4">

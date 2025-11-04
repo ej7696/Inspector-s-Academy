@@ -167,7 +167,7 @@ const api = {
         return userToUpdate;
     },
 
-    addUser: async (newUser: Omit<User, 'id' | 'subscriptionTier' | 'unlockedExams' | 'history' | 'inProgressQuiz' | 'role' | 'createdAt' | 'lastActive'>): Promise<User> => {
+    addUser: async (newUser: Omit<User, 'id' | 'subscriptionTier' | 'unlockedExams' | 'history' | 'inProgressQuiz' | 'createdAt' | 'lastActive'>): Promise<User> => {
         let users: User[] = JSON.parse(localStorage.getItem(DB_USERS_KEY) || '[]');
         if (users.some(u => u.email.toLowerCase() === newUser.email.toLowerCase())) {
             throw new Error('An account with this email already exists.');
@@ -179,7 +179,6 @@ const api = {
             subscriptionTier: 'Cadet',
             unlockedExams: [],
             history: [],
-            role: 'USER',
             createdAt: now,
             lastActive: now,
             isSuspended: false,
