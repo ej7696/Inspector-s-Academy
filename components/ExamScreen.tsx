@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Question, QuizSettings, InProgressAnswer } from '../types';
-import { FlagIcon, StrikethroughIcon, PreviousIcon, NextIcon, NavigatorIcon, ClockIcon, ExitIcon } from './ExamIcons';
+import { FlagIcon, StrikethroughIcon, PreviousIcon, NextIcon, NavigatorIcon, ClockIcon, ExitIcon, CalculatorIcon } from './ExamIcons';
+import Calculator from './Calculator';
 
 interface Props {
   questions: Question[];
@@ -19,6 +20,7 @@ const ExamScreen: React.FC<Props> = ({
   questions, quizSettings, currentIndex, answers, onSelectAnswer, onNavigate, onToggleFlag, onToggleStrikethrough, onSubmit, onSaveAndExit
 }) => {
   const [isNavigatorVisible, setIsNavigatorVisible] = useState(false);
+  const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState(quizSettings.numQuestions * 90); // 1.5 mins per question
   const [showExplanation, setShowExplanation] = useState(false);
 
@@ -118,13 +120,16 @@ const ExamScreen: React.FC<Props> = ({
             <p className="text-sm text-gray-500">Question {currentIndex + 1} of {questions.length}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 sm:gap-6">
+        <div className="flex items-center gap-2 sm:gap-4">
           {quizSettings.isTimed && (
             <div className={`flex items-center gap-2 font-mono text-base sm:text-lg font-semibold ${timeLeft < 300 ? 'text-red-600' : 'text-gray-800'}`}>
               <ClockIcon />
               <span className="hidden sm:inline">{formatTime(timeLeft)}</span>
             </div>
           )}
+          <button onClick={() => setIsCalculatorOpen(true)} className="p-2 rounded-md hover:bg-gray-200" title="Open Calculator">
+             <CalculatorIcon className="w-5 h-5 text-gray-600"/>
+          </button>
           <button onClick={() => onSaveAndExit(timeLeft)} className="flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-red-600 p-2 rounded-md hover:bg-red-100" title="Save and go Home">
             <ExitIcon className="w-5 h-5"/>
             <span className="hidden sm:inline">Home</span>
@@ -251,6 +256,7 @@ const ExamScreen: React.FC<Props> = ({
           </footer>
         </main>
       </div>
+      {isCalculatorOpen && <Calculator onClose={() => setIsCalculatorOpen(false)} />}
     </div>
   );
 };
