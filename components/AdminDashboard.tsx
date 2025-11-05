@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { User, ActivityEvent, Exam, QuizResult, SubscriptionTier, ActivityEventType, Role } from '../types';
 import api from '../services/apiService';
 import AddUserModal from './AddUserModal';
-import ConfirmDialog from './ConfirmDialog';
 import EditUserModal from './EditUserModal';
 import ExamManager from './ExamManager';
 import AnnouncementManager from './AnnouncementManager';
@@ -97,6 +96,8 @@ const MonitoringTab: React.FC<{ currentUser: User; onSwitchTab: (tab: Tab) => vo
             setActivity(feed);
         };
         fetchData();
+        const intervalId = setInterval(fetchData, 5000); // Refresh every 5 seconds
+        return () => clearInterval(intervalId);
     }, []);
     
     const subscriptionBreakdown = useMemo(() => {
@@ -417,6 +418,5 @@ const LineChart: React.FC<{ data: { labels: string[], data: number[] } }> = ({ d
     }, [data]);
     return <canvas ref={chartRef}></canvas>;
 };
-
 
 export default AdminDashboard;
