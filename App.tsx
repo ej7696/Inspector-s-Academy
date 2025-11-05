@@ -104,14 +104,12 @@ const App: React.FC = () => {
       
       setLoadingMessage(`Generating your ${quizSettings.examMode} exam...`);
       setIsLoading(true);
+      setInfoDialog({ open: false, title: '', message: '', buttons: [] }); // Close any open dialogs
 
       try {
           const generatedQuestions = await api.generateQuiz(quizSettings);
-          setQuestions(generatedQuestions);
-          const initialAnswers: InProgressAnswer[] = generatedQuestions.map(() => ({ userAnswer: null, flagged: false, strikethroughOptions: [] }));
-          setAnswers(initialAnswers);
-          setCurrentQuestionIndex(0);
-
+          
+          // Deduct allowance only after successful generation for STARTER users
           if (user.subscriptionTier === 'STARTER') {
               const updatedUser = await api.updateUser(user.id, {
                   monthlyQuestionRemaining: (user.monthlyQuestionRemaining || 0) - quizSettings.numQuestions,
@@ -123,16 +121,19 @@ const App: React.FC = () => {
               setUser(updatedUser);
           }
           
+          setQuestions(generatedQuestions);
+          const initialAnswers: InProgressAnswer[] = generatedQuestions.map(() => ({ userAnswer: null, flagged: false, strikethroughOptions: [] }));
+          setAnswers(initialAnswers);
+          setCurrentQuestionIndex(0);
+          
           setView(quizSettings.examMode === 'simulation' ? 'exam' : 'quiz');
       } catch (e: any) {
-          setIsLoading(false);
-          setLoadingMessage('');
           setInfoDialog({
               open: true,
               title: "Quiz Generation Failed",
               message: "There was an issue generating your quiz. Your free monthly allowance has not been affected.",
               buttons: [
-                  { text: 'Retry', onClick: () => { setInfoDialog({ open: false, title: '', message: '', buttons: [] }); handleStartQuizFromInstructions(); }, style: 'primary' },
+                  { text: 'Retry', onClick: () => handleStartQuizFromInstructions(), style: 'primary' },
                   { text: 'Cancel', onClick: () => { setInfoDialog({ open: false, title: '', message: '', buttons: [] }); handleGoHome(); }, style: 'neutral' }
               ]
           });

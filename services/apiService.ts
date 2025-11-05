@@ -128,7 +128,7 @@ const api = {
     
     login: async (email: string, password?: string): Promise<User> => {
         await new Promise(res => setTimeout(res, 500)); 
-        let users: User[] = JSON.parse(localStorage.getItem(DB_USERS_KEY) || '[]');
+        const users: User[] = JSON.parse(localStorage.getItem(DB_USERS_KEY) || '[]');
         let user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
         
         if (!user || (password && user.password !== password)) {
@@ -139,55 +139,47 @@ const api = {
             throw new Error('This account has been suspended.');
         }
 
+        let userForSession = user;
+
         // Check for subscription expiration
-        if (user.subscriptionExpiresAt && Date.now() > user.subscriptionExpiresAt) {
-            user.subscriptionTier = 'STARTER';
-            user.unlockedExams = [];
-            // When subscription expires, reset monthly allowance as well
-            user.monthlyQuestionRemaining = 15;
-            user.monthlyExamUsage = {};
-            user.monthlyResetDate = Date.now() + THIRTY_DAYS_IN_MS;
-            await api.updateUser(user.id, { 
-                subscriptionTier: 'STARTER', 
+        if (user.subscriptionTier !== 'STARTER' && user.subscriptionExpiresAt && Date.now() > user.subscriptionExpiresAt) {
+            const downgradedData = { 
+                subscriptionTier: 'STARTER' as SubscriptionTier, 
                 unlockedExams: [],
                 monthlyQuestionRemaining: 15,
                 monthlyExamUsage: {},
                 monthlyResetDate: Date.now() + THIRTY_DAYS_IN_MS,
-            });
-        }
-
-        // Check for monthly reset for STARTER users
-        if (user.subscriptionTier === 'STARTER' && user.monthlyResetDate && Date.now() > user.monthlyResetDate) {
-            user.monthlyQuestionRemaining = 15;
-            user.monthlyExamUsage = {};
-            user.monthlyResetDate = Date.now() + THIRTY_DAYS_IN_MS;
-            await api.updateUser(user.id, {
+            };
+            userForSession = await api.updateUser(user.id, downgradedData);
+        } else if (user.subscriptionTier === 'STARTER' && user.monthlyResetDate && Date.now() > user.monthlyResetDate) {
+            // Check for monthly reset for STARTER users
+            const resetData = {
                 monthlyQuestionRemaining: 15,
                 monthlyExamUsage: {},
                 monthlyResetDate: Date.now() + THIRTY_DAYS_IN_MS,
-            });
+            };
+            userForSession = await api.updateUser(user.id, resetData);
         }
-
-
-        sessionStorage.setItem(SESSION_KEY, JSON.stringify(user));
-        await api.logActivity(user.id, 'login', `User logged in successfully.`);
         
-        const updatedUser = { ...user, lastActive: Date.now() };
-        api.updateUser(user.id, { lastActive: Date.now() });
+        const finalUser = { ...userForSession, lastActive: Date.now() };
+        await api.updateUser(finalUser.id, { lastActive: Date.now() });
 
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(finalUser));
+        await api.logActivity(finalUser.id, 'login', `User logged in successfully.`);
+        
         // --- Permissions Audit (Existing) ---
         console.log("--- Permissions Audit ---");
-        console.log("🔐 Active Role:", updatedUser.role);
-        if (updatedUser.role === 'SUB_ADMIN') {
-            console.log("✅ Enabled Permissions:", updatedUser.permissions);
+        console.log("🔐 Active Role:", finalUser.role);
+        if (finalUser.role === 'SUB_ADMIN') {
+            console.log("✅ Enabled Permissions:", finalUser.permissions);
             const hiddenActions = Object.keys(defaultPermissions).reduce((acc, key) => {
-                if (!updatedUser.permissions || !updatedUser.permissions[key as keyof SubAdminPermissions]) {
+                if (!finalUser.permissions || !finalUser.permissions[key as keyof SubAdminPermissions]) {
                     acc[key] = false;
                 }
                 return acc;
             }, {} as any);
             console.log("🚫 Restricted Actions:", hiddenActions);
-        } else if (updatedUser.role === 'ADMIN') {
+        } else if (finalUser.role === 'ADMIN') {
             console.log("✅ Full admin permissions enabled.");
         } else {
             console.log("✅ Standard user permissions.");
@@ -217,10 +209,10 @@ const api = {
             }
             return { role: user.role, visibleTabs, disabledActions, restrictedSections };
         };
-        console.log("Permissions Verification:", getVerificationLog(updatedUser));
+        console.log("Permissions Verification:", getVerificationLog(finalUser));
 
 
-        return updatedUser;
+        return finalUser;
     },
 
     logout: async (): Promise<void> => {
@@ -256,37 +248,28 @@ const api = {
             return null;
         }
 
+        let userForSession = currentUser;
+
         // Check for subscription expiration on session refresh
-        if (currentUser.subscriptionExpiresAt && Date.now() > currentUser.subscriptionExpiresAt) {
-            currentUser.subscriptionTier = 'STARTER';
-            currentUser.unlockedExams = [];
-            currentUser.monthlyQuestionRemaining = 15;
-            currentUser.monthlyExamUsage = {};
-            currentUser.monthlyResetDate = Date.now() + THIRTY_DAYS_IN_MS;
-            await api.updateUser(currentUser.id, { 
+        if (currentUser.subscriptionTier !== 'STARTER' && currentUser.subscriptionExpiresAt && Date.now() > currentUser.subscriptionExpiresAt) {
+             userForSession = await api.updateUser(currentUser.id, { 
                 subscriptionTier: 'STARTER', 
                 unlockedExams: [],
                 monthlyQuestionRemaining: 15,
                 monthlyExamUsage: {},
                 monthlyResetDate: Date.now() + THIRTY_DAYS_IN_MS,
             });
-            sessionStorage.setItem(SESSION_KEY, JSON.stringify(currentUser));
-        }
-
-        // Check for monthly reset for STARTER users
-        if (currentUser.subscriptionTier === 'STARTER' && currentUser.monthlyResetDate && Date.now() > currentUser.monthlyResetDate) {
-            currentUser.monthlyQuestionRemaining = 15;
-            currentUser.monthlyExamUsage = {};
-            currentUser.monthlyResetDate = Date.now() + THIRTY_DAYS_IN_MS;
-            await api.updateUser(currentUser.id, {
+        } else if (currentUser.subscriptionTier === 'STARTER' && currentUser.monthlyResetDate && Date.now() > currentUser.monthlyResetDate) {
+            // Check for monthly reset for STARTER users
+            userForSession = await api.updateUser(currentUser.id, {
                 monthlyQuestionRemaining: 15,
                 monthlyExamUsage: {},
                 monthlyResetDate: Date.now() + THIRTY_DAYS_IN_MS,
             });
-            sessionStorage.setItem(SESSION_KEY, JSON.stringify(currentUser));
         }
 
-        return currentUser;
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(userForSession));
+        return userForSession;
     },
 
     getAllUsers: async (): Promise<User[]> => {
@@ -317,11 +300,14 @@ const api = {
 
         localStorage.setItem(DB_USERS_KEY, JSON.stringify(users));
         
-        const sessionUser = await api.checkSession();
-        if (sessionUser && sessionUser.id === userId) {
-             sessionStorage.setItem(SESSION_KEY, JSON.stringify(userToUpdate));
+        const sessionUserJson = sessionStorage.getItem(SESSION_KEY);
+        if (sessionUserJson) {
+            const sessionUser = JSON.parse(sessionUserJson);
+            if (sessionUser.id === userId) {
+                sessionStorage.setItem(SESSION_KEY, JSON.stringify(userToUpdate));
+            }
         }
-
+        
         return userToUpdate;
     },
 
