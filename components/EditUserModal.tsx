@@ -38,11 +38,9 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
           ...prev, 
           permissions: { 
               ...(prev.permissions || {
-                  canEditUserDetails: false,
-                  canSendPasswordResets: false,
-                  canManageSubscriptions: false,
-                  canSuspendUsers: false,
-                  canManageAnnouncements: false,
+                  canViewUserList: true, canEditUsers: false, canSendPasswordResets: false, canManageAnnouncements: false,
+                  canManageExams: false, canAccessPerformanceAnalytics: false, canViewBillingSummary: false,
+                  canManageSubscriptions: false, canViewActivityLogs: false, canSuspendUsers: false,
               }),
               [name]: checked 
             }
@@ -146,30 +144,20 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
             </div>
           
             {/* Sub-Admin Permissions */}
-            {formData.role === 'SUB_ADMIN' && (
+            {formData.role === 'SUB_ADMIN' && currentUser.role === 'ADMIN' && (
                 <div>
                     <label className="block text-sm font-bold text-gray-700">Sub-Admin Permissions</label>
-                    <div className="mt-2 space-y-2 p-3 bg-gray-50 rounded-md border">
-                        <label className="flex items-center">
-                            <input type="checkbox" name="canEditUserDetails" checked={formData.permissions?.canEditUserDetails || false} onChange={handlePermissionChange} className="h-4 w-4 text-blue-600 border-gray-300 rounded"/>
-                            <span className="ml-2 text-sm text-gray-700">Can edit user details (name, phone)</span>
-                        </label>
-                         <label className="flex items-center">
-                            <input type="checkbox" name="canManageSubscriptions" checked={formData.permissions?.canManageSubscriptions || false} onChange={handlePermissionChange} className="h-4 w-4 text-blue-600 border-gray-300 rounded"/>
-                            <span className="ml-2 text-sm text-gray-700">Can manage user subscriptions & unlocks</span>
-                        </label>
-                        <label className="flex items-center">
-                            <input type="checkbox" name="canSendPasswordResets" checked={formData.permissions?.canSendPasswordResets || false} onChange={handlePermissionChange} className="h-4 w-4 text-blue-600 border-gray-300 rounded"/>
-                            <span className="ml-2 text-sm text-gray-700">Can send password resets</span>
-                        </label>
-                         <label className="flex items-center">
-                            <input type="checkbox" name="canSuspendUsers" checked={formData.permissions?.canSuspendUsers || false} onChange={handlePermissionChange} className="h-4 w-4 text-blue-600 border-gray-300 rounded"/>
-                            <span className="ml-2 text-sm text-gray-700">Can suspend / unsuspend users</span>
-                        </label>
-                        <label className="flex items-center">
-                            <input type="checkbox" name="canManageAnnouncements" checked={formData.permissions?.canManageAnnouncements || false} onChange={handlePermissionChange} className="h-4 w-4 text-blue-600 border-gray-300 rounded"/>
-                            <span className="ml-2 text-sm text-gray-700">Can manage announcements</span>
-                        </label>
+                    <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 p-3 bg-gray-50 rounded-md border">
+                        <label className="flex items-center"><input type="checkbox" name="canViewUserList" checked={formData.permissions?.canViewUserList || false} onChange={handlePermissionChange} className="h-4 w-4"/> <span className="ml-2 text-sm">View user list</span></label>
+                        <label className="flex items-center"><input type="checkbox" name="canEditUsers" checked={formData.permissions?.canEditUsers || false} onChange={handlePermissionChange} className="h-4 w-4"/> <span className="ml-2 text-sm">Edit user profiles</span></label>
+                        <label className="flex items-center"><input type="checkbox" name="canSendPasswordResets" checked={formData.permissions?.canSendPasswordResets || false} onChange={handlePermissionChange} className="h-4 w-4"/> <span className="ml-2 text-sm">Send password resets</span></label>
+                        <label className="flex items-center"><input type="checkbox" name="canManageSubscriptions" checked={formData.permissions?.canManageSubscriptions || false} onChange={handlePermissionChange} className="h-4 w-4"/> <span className="ml-2 text-sm">Manage subscriptions</span></label>
+                        <label className="flex items-center"><input type="checkbox" name="canSuspendUsers" checked={formData.permissions?.canSuspendUsers || false} onChange={handlePermissionChange} className="h-4 w-4"/> <span className="ml-2 text-sm">Suspend / unsuspend users</span></label>
+                        <label className="flex items-center"><input type="checkbox" name="canManageAnnouncements" checked={formData.permissions?.canManageAnnouncements || false} onChange={handlePermissionChange} className="h-4 w-4"/> <span className="ml-2 text-sm">Manage announcements</span></label>
+                        <label className="flex items-center"><input type="checkbox" name="canManageExams" checked={formData.permissions?.canManageExams || false} onChange={handlePermissionChange} className="h-4 w-4"/> <span className="ml-2 text-sm">Manage exams & questions</span></label>
+                        <label className="flex items-center"><input type="checkbox" name="canAccessPerformanceAnalytics" checked={formData.permissions?.canAccessPerformanceAnalytics || false} onChange={handlePermissionChange} className="h-4 w-4"/> <span className="ml-2 text-sm">Access performance analytics</span></label>
+                        <label className="flex items-center"><input type="checkbox" name="canViewBillingSummary" checked={formData.permissions?.canViewBillingSummary || false} onChange={handlePermissionChange} className="h-4 w-4"/> <span className="ml-2 text-sm">View billing summary</span></label>
+                        <label className="flex items-center"><input type="checkbox" name="canViewActivityLogs" checked={formData.permissions?.canViewActivityLogs || false} onChange={handlePermissionChange} className="h-4 w-4"/> <span className="ml-2 text-sm">View activity logs</span></label>
                     </div>
                 </div>
             )}
@@ -199,10 +187,10 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
                 <div>
                     <label className="block text-sm font-bold text-gray-700">Quick Actions</label>
                     <div className="mt-2 flex flex-wrap gap-2">
-                         {currentUser.permissions?.canSendPasswordResets && (
+                         {(currentUser.role === 'ADMIN' || currentUser.permissions?.canSendPasswordResets) && (
                             <button type="button" onClick={handlePasswordReset} className="text-sm bg-yellow-100 text-yellow-800 hover:bg-yellow-200 px-3 py-1 rounded-md">Send Password Reset</button>
                          )}
-                         {currentUser.permissions?.canSuspendUsers && (
+                         {(currentUser.role === 'ADMIN' || currentUser.permissions?.canSuspendUsers) && (
                              <button type="button" onClick={handleToggleSuspend} className={`text-sm text-white px-3 py-1 rounded-md ${user.isSuspended ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'}`}>
                                 {user.isSuspended ? 'Unsuspend User' : 'Suspend User'}
                             </button>

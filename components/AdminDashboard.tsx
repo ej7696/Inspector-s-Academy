@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-// FIX: Import 'Role' type from '../types' to resolve compilation error.
 import { User, ActivityEvent, Exam, QuizResult, SubscriptionTier, ActivityEventType, Role } from '../types';
 import api from '../services/apiService';
 import AddUserModal from './AddUserModal';
@@ -29,7 +28,8 @@ const AdminDashboard: React.FC<{ onGoHome: () => void; currentUser: User, onImpe
     };
     
     const canManageAnnouncements = currentUser.role === 'ADMIN' || currentUser.permissions?.canManageAnnouncements;
-    const canManageExams = currentUser.role === 'ADMIN';
+    const canManageExams = currentUser.role === 'ADMIN' || currentUser.permissions?.canManageExams;
+    const canViewUsers = currentUser.role === 'ADMIN' || currentUser.permissions?.canViewUserList;
 
     return (
         <div className="max-w-7xl mx-auto p-4 md:p-6 font-sans">
@@ -42,7 +42,7 @@ const AdminDashboard: React.FC<{ onGoHome: () => void; currentUser: User, onImpe
             <div className="border-b border-gray-200">
                 <nav className="-mb-px flex space-x-6" aria-label="Tabs">
                     <TabButton name="Dashboard" tab="dashboard" activeTab={activeTab} onClick={setActiveTab} />
-                    <TabButton name="User Management" tab="users" activeTab={activeTab} onClick={setActiveTab} />
+                    {canViewUsers && <TabButton name="User Management" tab="users" activeTab={activeTab} onClick={setActiveTab} />}
                     {canManageExams && <TabButton name="Exam Content" tab="exams" activeTab={activeTab} onClick={setActiveTab} />}
                     {canManageAnnouncements && <TabButton name="Announcements" tab="announcements" activeTab={activeTab} onClick={setActiveTab} />}
                 </nav>
@@ -145,6 +145,10 @@ const MonitoringTab: React.FC<{ currentUser: User; onSwitchTab: (tab: Tab) => vo
     }, [allUsers]);
 
     const filteredActivity = activity.filter(a => activityFilter === 'all' || a.type === activityFilter);
+    
+    const canViewAnalytics = currentUser.role === 'ADMIN' || currentUser.permissions?.canAccessPerformanceAnalytics;
+    const canViewBilling = currentUser.role === 'ADMIN' || currentUser.permissions?.canViewBillingSummary;
+    const canViewActivity = currentUser.role === 'ADMIN' || currentUser.permissions?.canViewActivityLogs;
 
     return (
         <div className="space-y-6">
@@ -152,21 +156,19 @@ const MonitoringTab: React.FC<{ currentUser: User; onSwitchTab: (tab: Tab) => vo
                 <StatCard title="Total Users" value={stats.totalUsers.toString()} />
                 <StatCard title="Active Users (7d)" value={stats.activeUsers7d.toString()} />
                 <StatCard title="New Signups (This Month)" value={stats.newSignupsMonth.toString()} />
-                <StatCard title="Subscription Breakdown">
-                    <DonutChart data={subscriptionBreakdown} />
-                </StatCard>
+                {canViewBilling && <StatCard title="Subscription Breakdown"><DonutChart data={subscriptionBreakdown} /></StatCard>}
             </div>
              <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                 <div className="lg:col-span-3 bg-white p-4 rounded-lg shadow-md">
+                 {canViewAnalytics && <div className="lg:col-span-3 bg-white p-4 rounded-lg shadow-md">
                      <h3 className="font-semibold text-gray-700 mb-2">Exam Popularity & Performance</h3>
                      <BarChart data={examPerformance} onBarClick={() => onSwitchTab('users')} />
-                 </div>
-                 <div className="lg:col-span-2 bg-white p-4 rounded-lg shadow-md">
+                 </div>}
+                 {canViewAnalytics && <div className="lg:col-span-2 bg-white p-4 rounded-lg shadow-md">
                      <h3 className="font-semibold text-gray-700 mb-2">User Growth Trajectory</h3>
                      <LineChart data={userGrowth} />
-                 </div>
+                 </div>}
              </div>
-            <div className="bg-white p-4 rounded-lg shadow-md">
+            {canViewActivity && <div className="bg-white p-4 rounded-lg shadow-md">
                 <div className="flex justify-between items-center mb-2">
                      <h3 className="font-semibold text-gray-700">Real-Time Activity Feed</h3>
                      <select value={activityFilter} onChange={e => setActivityFilter(e.target.value as any)} className="text-sm p-1 border rounded-md">
@@ -186,7 +188,7 @@ const MonitoringTab: React.FC<{ currentUser: User; onSwitchTab: (tab: Tab) => vo
                         </li>
                     ))}
                 </ul>
-            </div>
+            </div>}
         </div>
     );
 };
@@ -231,6 +233,8 @@ const UserManagementTab: React.FC<{ currentUser: User; onImpersonate: (user: Use
         setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
     };
 
+    const canEditUsers = currentUser.role === 'ADMIN' || !!currentUser.permissions?.canEditUsers;
+
     return (
         <div className="bg-white p-6 rounded-lg shadow-md">
             <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-4">
@@ -261,46 +265,54 @@ const UserManagementTab: React.FC<{ currentUser: User; onImpersonate: (user: Use
                             Export Users (CSV)
                         </button>
                      )}
-                     <button onClick={() => setIsAddModalOpen(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700">
+                     <button onClick={() => setIsAddModalOpen(true)} disabled={!canEditUsers} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400">
                         + Add New User
                     </button>
                 </div>
             </div>
             
             <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
+                <table className="min-w-full divide-y divide-gray-200 text-sm">
                     <thead className="bg-gray-50">
                         <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subscription</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Active</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subscription</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Exams Taken</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Avg. Score</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Active</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                        {filteredUsers.map(user => (
-                            <tr key={user.id}>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    <p className="font-semibold">{user.fullName || 'N/A'}</p>
-                                    <p className="text-sm text-gray-500">{user.email}</p>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.subscriptionTier === 'SPECIALIST' ? 'bg-green-100 text-green-800' : user.subscriptionTier === 'PROFESSIONAL' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
-                                        {user.subscriptionTier}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.isSuspended ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
-                                        {user.isSuspended ? 'Suspended' : 'Active'}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(user.lastActive).toLocaleString()}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                    <button onClick={() => setEditingUser(user)} className="text-indigo-600 hover:text-indigo-900">Edit</button>
-                                </td>
-                            </tr>
-                        ))}
+                        {filteredUsers.map(user => {
+                            const avgScore = user.history.length > 0 ? user.history.reduce((acc, h) => acc + h.percentage, 0) / user.history.length : 0;
+                            const canBeEdited = currentUser.role === 'ADMIN' || (canEditUsers && user.role === 'USER');
+                            return (
+                                <tr key={user.id}>
+                                    <td className="px-4 py-4 whitespace-nowrap">
+                                        <p className="font-semibold">{user.fullName || 'N/A'}</p>
+                                        <p className="text-gray-500">{user.email}</p>
+                                    </td>
+                                    <td className="px-4 py-4 whitespace-nowrap">
+                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.subscriptionTier === 'SPECIALIST' ? 'bg-green-100 text-green-800' : user.subscriptionTier === 'PROFESSIONAL' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
+                                            {user.subscriptionTier}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-4 whitespace-nowrap">
+                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.isSuspended ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                                            {user.isSuspended ? 'Suspended' : 'Active'}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-4 whitespace-nowrap text-center">{user.history.length}</td>
+                                    <td className="px-4 py-4 whitespace-nowrap">{avgScore > 0 ? `${avgScore.toFixed(1)}%` : '--'}</td>
+                                    <td className="px-4 py-4 whitespace-nowrap text-gray-500">{new Date(user.lastActive).toLocaleString()}</td>
+                                    <td className="px-4 py-4 whitespace-nowrap font-medium">
+                                        <button onClick={() => setEditingUser(user)} disabled={!canBeEdited} className="text-indigo-600 hover:text-indigo-900 disabled:text-gray-400 disabled:cursor-not-allowed">Edit</button>
+                                    </td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
             </div>
@@ -371,7 +383,7 @@ const BarChart: React.FC<{ data: { examName: string, avgScore: number, quizzesTa
                         tooltip: { 
                             callbacks: {
                                 label: function(context: any) {
-                                    if(context.parsed) {
+                                    if(typeof context.parsed?.x === 'number') {
                                         const item = data[context.dataIndex];
                                         return `Avg Score: ${item.avgScore.toFixed(1)}% | Quizzes: ${item.quizzesTaken}`;
                                     }
