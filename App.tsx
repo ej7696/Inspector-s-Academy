@@ -301,7 +301,7 @@ const App: React.FC = () => {
     };
     
     const handleNavigate = (destination: 'next' | 'prev' | number) => {
-        if (user?.subscriptionTier === 'STARTER' && currentQuestionIndex === (questions.length - 1) && destination === 'next') {
+        if (user?.subscriptionTier === 'STARTER' && currentQuestionIndex === 4 && destination === 'next') {
             setView('paywall');
             return;
         }
@@ -319,33 +319,117 @@ const App: React.FC = () => {
                 setCurrentQuestionIndex(destination);
             }
         }
+        setIsReviewing(false);
     };
 
-    const handleToggleFlag = () => {
+     const handleToggleFlag = () => {
         setCurrentQuizAnswers(prev => {
             const newAnswers = [...prev];
-            const currentAnswerState = newAnswers[currentQuestionIndex] || { userAnswer: null, flagged: false, strikethroughOptions: [] };
             newAnswers[currentQuestionIndex] = {
-                ...currentAnswerState,
-                flagged: !currentAnswerState.flagged,
+                ...newAnswers[currentQuestionIndex],
+                flagged: !newAnswers[currentQuestionIndex].flagged,
             };
             return newAnswers;
         });
     };
     
     const handleToggleStrikethrough = (option: string) => {
-         setCurrentQuizAnswers(prev => {
+        setCurrentQuizAnswers(prev => {
             const newAnswers = [...prev];
-            const currentAnswer = newAnswers[currentQuestionIndex];
-            const currentStrikethroughs = currentAnswer.strikethroughOptions || [];
-            
+            const currentStrikethroughs = newAnswers[currentQuestionIndex].strikethroughOptions || [];
             if (currentStrikethroughs.includes(option)) {
-                 currentAnswer.strikethroughOptions = currentStrikethroughs.filter(item => item !== option);
+                newAnswers[currentQuestionIndex].strikethroughOptions = currentStrikethroughs.filter(o => o !== option);
             } else {
-                 currentAnswer.strikethroughOptions = [...currentStrikethroughs, option];
+                newAnswers[currentQuestionIndex].strikethroughOptions = [...currentStrikethroughs, option];
             }
             return newAnswers;
         });
+    };
+
+
+    const finishQuiz = async () => {
+        if (!user) return;
+        let score = 0;
+        const userAnswers: UserAnswer[] = questions.map((q, index) => {
+            const userAnswer = currentQuizAnswers[index]?.userAnswer || 'Not Answered';
+            const isCorrect = userAnswer === q.answer;
+            if (isCorrect) {
+                score++;
+            }
+            return {
+                question: q.question,
+                options: q.options,
+                answer: q.answer,
+                userAnswer,
+                isCorrect,
+                category: q.category,
+            };
+        });
+
+        const result: Omit<QuizResult, 'id'|'userId'> = {
+            examName: quizSettings!.examName,
+            score,
+            totalQuestions: questions.length,
+            percentage: (score / questions.length) * 100,
+            date: Date.now(),
+            userAnswers,
+        };
+
+        try {
+            const savedResult = await api.saveQuizResult(user.id, result);
+            setQuizResult(savedResult);
+            // Clear in-progress quiz after successful save
+            const updatedUser = await api.clearInProgressQuiz(user.id);
+            setUser(updatedUser);
+            setView('score');
+        } catch (error) {
+            console.error("Failed to save quiz result:", error);
+            setError("Could not save your quiz result. Please try again.");
+            // Don't clear progress if save fails
+            setQuizResult({ ...result, id: `local_${Date.now()}`, userId: user.id }); // Show local result
+            setView('score');
+        }
+    };
+    
+    const saveQuizProgress = async () => {
+        if (!user || !quizSettings || questions.length === 0) return;
+
+        const progress: InProgressQuizState = {
+            questions,
+            answers: currentQuizAnswers,
+            currentQuestionIndex,
+            quizSettings,
+            startTime: Date.now(), // This could be improved to persist start time
+            timeRemaining: 90 * questions.length, // This should persist actual time
+            isSimulationIntermission,
+        };
+        try {
+            const updatedUser = await api.saveInProgressQuiz(user.id, progress);
+            setUser(updatedUser);
+        } catch(error) {
+            console.error("Failed to save progress:", error);
+        }
+    };
+
+    const handleResumeQuiz = (progress: InProgressQuizState) => {
+        setQuestions(progress.questions);
+        setCurrentQuizAnswers(progress.answers);
+        setCurrentQuestionIndex(progress.currentQuestionIndex);
+        setQuizSettings(progress.quizSettings);
+        setIsSimulationIntermission(progress.isSimulationIntermission);
+        setView('quiz');
+    };
+
+    const handleAbandonQuiz = async () => {
+        if (!user) return;
+        if(window.confirm('Are you sure you want to abandon this quiz? Your progress will be lost.')) {
+            try {
+                const updatedUser = await api.clearInProgressQuiz(user.id);
+                setUser(updatedUser);
+            } catch(e) {
+                console.error("Failed to abandon quiz:", e);
+            }
+        }
     };
 
     const handleAskFollowUp = async (question: Question, query: string) => {
@@ -355,352 +439,157 @@ const App: React.FC = () => {
             const answer = await api.generateFollowUp(question, query);
             setFollowUpAnswer(answer);
         } catch (err) {
-            console.error("Follow-up failed:", err);
             setFollowUpAnswer("Sorry, I couldn't get an answer for that. Please try again.");
         } finally {
             setIsFollowUpLoading(false);
         }
     };
 
-    const finishQuiz = async () => {
-        if (!user || !quizSettings) return;
-        let finalAnswers = currentQuizAnswers;
-        
-        const finalUserAnswers: UserAnswer[] = questions.map((q, i) => ({
-            question: q.question,
-            options: q.options,
-            answer: q.answer,
-            userAnswer: finalAnswers[i]?.userAnswer || 'Not Answered',
-            isCorrect: finalAnswers[i]?.userAnswer === q.answer,
-            category: q.category
-        }));
+    if (isLoading) {
+        return <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 space-y-4">
+            <Logo className="h-40 w-auto" />
+            <p className="text-gray-600 font-semibold">{loadingMessage}</p>
+        </div>;
+    }
 
-        const score = finalUserAnswers.filter(a => a.isCorrect).length;
-        const total = finalUserAnswers.length;
-        const percentage = total > 0 ? (score / total) * 100 : 0;
-    
-        const result: Omit<QuizResult, 'id' | 'userId'> = {
-            examName: quizSettings.examName,
-            score,
-            totalQuestions: total,
-            percentage,
-            date: Date.now(),
-            userAnswers: finalUserAnswers,
-        };
-        
-        try {
-            const savedResult = await api.saveQuizResult(user.id, result);
-            setQuizResult(savedResult);
-            const updatedUser = await api.clearInProgressQuiz(user.id);
-            setUser(updatedUser);
-            setView('score');
-            await api.logActivity(user.id, 'quiz_complete', `Completed "${result.examName}" with ${percentage.toFixed(1)}%`);
-        } catch (error) {
-            console.error("Failed to save quiz result:", error);
-            setError("Could not save your quiz result. Please try again.");
-        }
-    };
-    
-    const restartQuiz = () => {
-        if (quizResult) {
-            const previousSettings = {
-                examName: quizResult.examName,
-                numQuestions: quizResult.totalQuestions,
-                isTimed: false,
-                examMode: 'open' as const
-            };
-            setQuizSettings(previousSettings);
-            startQuiz();
-        }
-    };
-    
-    const saveQuizProgress = async (time?: number) => {
-        if (view !== 'quiz' || !user || !quizSettings || questions.length === 0) return;
-        
-        const progress: InProgressQuizState = {
-            questions,
-            answers: currentQuizAnswers,
-            currentQuestionIndex,
-            quizSettings,
-            startTime: Date.now(),
-            timeRemaining: time || 0,
-            isSimulationIntermission,
-        };
-        try {
-            const updatedUser = await api.saveInProgressQuiz(user.id, progress);
-            setUser(updatedUser);
-        } catch (error) {
-            console.error("Failed to save progress:", error);
-        }
-    };
-    
-    const handleResumeQuiz = (progress: InProgressQuizState) => {
-        setQuizSettings(progress.quizSettings);
-        setQuestions(progress.questions);
-        setCurrentQuizAnswers(progress.answers);
-        setCurrentQuestionIndex(progress.currentQuestionIndex);
-        setIsSimulationIntermission(progress.isSimulationIntermission);
-        setIsReviewing(false);
-        setView('quiz');
-    };
-    
-    const handleAbandonQuiz = async () => {
-        if (!user) return;
-        try {
-            const updatedUser = await api.clearInProgressQuiz(user.id);
-            setUser(updatedUser);
-        } catch (error) {
-            console.error("Failed to abandon quiz:", error);
-        }
-    };
-    
-    const impersonateUser = async (targetUser: User) => {
-        const adminUser = user;
-        if (!adminUser) return;
-        sessionStorage.setItem('adminUser', JSON.stringify(adminUser));
-        try {
-            const impersonatedUser = await api.login(targetUser.email, targetUser.password!);
-            setUser(impersonatedUser);
-            setView('home');
-        } catch (error) {
-            console.error("Impersonation failed", error);
-        }
-    };
-
-    const stopImpersonating = async () => {
-        const adminUserStr = sessionStorage.getItem('adminUser');
-        if (adminUserStr) {
-            const adminUser = JSON.parse(adminUserStr);
-            sessionStorage.removeItem('adminUser');
-            try {
-                const user = await api.login(adminUser.email, adminUser.password);
-                setUser(user);
-                setView('admin');
-            } catch (error) {
-                console.error("Failed to stop impersonating", error);
-                handleLogout(); // Fallback to logout
-            }
-        }
-    };
-
-    const handleSaveAndExit = async (time: number) => {
-        await saveQuizProgress(time);
-        goHome();
-    };
-
-    const handleOneTimeUnlock = async () => {
-        if (!user || !upsellDialogInfo) return;
-
-        const { examName, numQuestions, isTimed, topics } = upsellDialogInfo;
-        
-        try {
-            const updatedUser = await api.updateUser(user.id, { unlockedExams: [...user.unlockedExams, examName] });
-            setUser(updatedUser);
-            await api.logActivity(user.id, 'one_time_unlock', `Purchased one-time access to "${examName}" for $250.`);
-            
-            setUpsellDialogInfo(null);
-            
-            setQuizSettings({ examName, numQuestions, isTimed, examMode: 'open', topics });
-            setView('exam_mode_selection');
-        } catch (error) {
-            console.error("One-time unlock failed:", error);
-            setError("There was an issue unlocking the exam. Please try again.");
-        }
-    };
-
-    const renderContent = () => {
-        if (isLoading) {
-            return (
-                <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
-                    <Logo className="h-32 w-auto mb-4" />
-                    <div className="text-xl font-semibold text-gray-700">{loadingMessage}</div>
-                    <div className="mt-4 w-48 h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <div className="h-full bg-blue-600 animate-pulse w-full"></div>
+    const renderHeader = () => (
+        <header className="bg-white shadow-md">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="flex justify-between items-center h-20">
+                    <Logo className="h-full w-auto" />
+                    <div className="flex items-center gap-4">
+                         {user && (
+                            <span className="text-gray-600 font-medium hidden sm:block">
+                                Welcome, <button onClick={() => setView('profile')} className="font-bold text-blue-600 hover:underline">{user.fullName || user.email}</button>
+                            </span>
+                         )}
+                         {user && (user.role === 'ADMIN' || user.role === 'SUB_ADMIN') && (
+                            <button onClick={() => setView('admin')} className="text-sm font-semibold text-yellow-600 hover:underline">Admin Panel</button>
+                         )}
+                         {user && !isAdminImpersonating && (
+                            <button onClick={handleLogout} className="bg-red-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-700 transition-colors">
+                                LogOut
+                            </button>
+                         )}
+                          {isAdminImpersonating && user && (
+                            <button onClick={() => {
+                                const adminUser = JSON.parse(sessionStorage.getItem('adminUser')!);
+                                sessionStorage.removeItem('adminUser');
+                                handleLoginSuccess(adminUser);
+                            }} className="bg-yellow-500 text-white px-4 py-2 rounded-lg font-semibold">
+                                Exit Impersonation
+                            </button>
+                          )}
                     </div>
                 </div>
-            );
-        }
+            </div>
+        </header>
+    );
+    
+    const MainContent = () => {
+        if (view === 'login') return <Login onLoginSuccess={handleLoginSuccess} />;
+        if (!user) return <Login onLoginSuccess={handleLoginSuccess} />;
 
         switch (view) {
-            case 'login':
-                return <Login onLoginSuccess={handleLoginSuccess} />;
-            case 'home':
-                return user && <HomePage 
-                    user={user} 
-                    onStartQuiz={initiateQuizFlow} 
-                    onViewDashboard={() => setView('dashboard')}
-                    onViewProfile={() => setView('profile')}
-                    onViewAdmin={() => setView('admin')}
-                    onLogout={handleLogout}
-                    onUpgrade={() => setView('paywall')}
-                    onResumeQuiz={handleResumeQuiz}
-                    onAbandonQuiz={handleAbandonQuiz}
-                />;
-            case 'quiz':
-                if (quizSettings && questions.length > 0 && user) {
-                    if (isReviewing) {
-                        return <ReviewScreen 
-                            questions={questions}
-                            answers={currentQuizAnswers}
-                            onReviewQuestion={(index) => {
-                                setCurrentQuestionIndex(index);
-                                setIsReviewing(false);
-                            }}
-                            onFinalSubmit={() => {
-                                // You might want a confirmation dialog here
-                                finishQuiz();
-                            }}
-                            onCancel={() => setIsReviewing(false)}
-                        />;
-                    }
-                    return <ExamScreen
-                        user={user}
-                        questions={questions}
-                        quizSettings={quizSettings}
-                        currentIndex={currentQuestionIndex}
-                        answers={currentQuizAnswers}
-                        onSelectAnswer={handleSelectAnswer}
-                        onNavigate={handleNavigate}
-                        onToggleFlag={handleToggleFlag}
-                        onToggleStrikethrough={handleToggleStrikethrough}
-                        onSubmit={() => setIsReviewing(true)}
-                        onSaveAndExit={handleSaveAndExit}
-                        onAskFollowUp={handleAskFollowUp}
-                        followUpAnswer={followUpAnswer}
-                        isFollowUpLoading={isFollowUpLoading}
-                    />;
-                }
-                return <div>Error: Quiz not loaded correctly. <button onClick={goHome}>Go Home</button></div>;
-            case 'score':
-                return quizResult && <ScoreScreen 
-                    result={quizResult} 
-                    onRestart={restartQuiz}
-                    onGoHome={goHome}
-                    isPro={user?.subscriptionTier !== 'STARTER'}
-                    onViewDashboard={() => setView('dashboard')}
-                    onRegenerate={() => initiateQuizFlow(quizResult.examName, 120, true)}
-                />;
-            case 'admin':
-                return user && <AdminDashboard 
-                    currentUser={user}
-                    onGoHome={goHome}
-                    onImpersonate={impersonateUser}
-                />;
-            case 'paywall':
-                return user && <Paywall
-                    user={user}
-                    onUpgrade={async (tier) => {
-                        await handleUpdateUser({ subscriptionTier: tier, subscriptionExpiresAt: Date.now() + 4 * 30 * 24 * 60 * 60 * 1000 });
-                        await api.logActivity(user.id, 'upgrade', `Upgraded to ${tier} plan.`);
-                        setView('home');
-                    }}
-                    onCancel={goHome} 
-                />;
-            case 'dashboard':
-                return user && <Dashboard 
-                    user={user} 
-                    onGoHome={goHome} 
-                    onStartWeaknessQuiz={(topics) => {
-                      const examName = user.unlockedExams[0] || 'API 510 - Pressure Vessel Inspector';
-                      initiateQuizFlow(examName, 10, false, topics);
-                    }}
-                    onUpgrade={() => setView('paywall')}
-                />;
-            case 'profile':
-                return user && <UserProfile
-                    user={user}
-                    onUpdateUser={handleUpdateUser}
-                    onGoHome={goHome}
-                    onViewDashboard={() => setView('dashboard')}
-                    onManageSubscription={() => setView('paywall')}
-                />;
-            case 'exam_mode_selection':
-                return quizSettings && <ExamModeSelector 
-                    examName={quizSettings.examName} 
-                    onSelectMode={(mode) => {
-                        setQuizSettings(prev => ({ ...prev!, examMode: mode }));
-                        setView('instructions');
-                    }} 
-                    onGoHome={goHome} 
-                />;
-            case 'instructions':
-                return quizSettings && <InstructionsModal 
-                    examName={quizSettings.examName}
-                    bodyOfKnowledge={api.getExamBodyOfKnowledge(quizSettings.examName)}
-                    onStart={startQuiz}
-                    onCancel={() => setView('exam_mode_selection')}
-                />;
-            default:
-                return <div>Invalid view state.</div>;
+            case 'home': return <HomePage user={user} onStartQuiz={initiateQuizFlow} onViewDashboard={() => setView('dashboard')} onViewProfile={() => setView('profile')} onViewAdmin={() => setView('admin')} onLogout={handleLogout} onUpgrade={() => setView('paywall')} onResumeQuiz={handleResumeQuiz} onAbandonQuiz={handleAbandonQuiz} />;
+            case 'exam_mode_selection': return <ExamModeSelector examName={quizSettings!.examName} onSelectMode={(mode) => { setQuizSettings(prev => ({ ...prev!, examMode: mode })); setView('instructions'); }} onGoHome={goHome} />;
+            case 'instructions': return <InstructionsModal examName={quizSettings!.examName} bodyOfKnowledge={api.getExamBodyOfKnowledge(quizSettings!.examName)} onStart={startQuiz} onCancel={() => setView('exam_mode_selection')} />
+            case 'quiz': return <ExamScreen user={user} questions={questions} quizSettings={quizSettings!} currentIndex={currentQuestionIndex} answers={currentQuizAnswers} onSelectAnswer={handleSelectAnswer} onNavigate={handleNavigate} onToggleFlag={handleToggleFlag} onToggleStrikethrough={handleToggleStrikethrough} onSubmit={() => setIsReviewing(true)} onSaveAndExit={async (time) => { await saveQuizProgress(); goHome(); }} onAskFollowUp={handleAskFollowUp} followUpAnswer={followUpAnswer} isFollowUpLoading={isFollowUpLoading} />;
+            case 'score': return <ScoreScreen result={quizResult!} onRestart={() => { if(quizSettings) setView('exam_mode_selection'); }} onGoHome={goHome} isPro={user.subscriptionTier !== 'STARTER'} onViewDashboard={() => setView('dashboard')} onRegenerate={startQuiz} />;
+            case 'admin': return <AdminDashboard onGoHome={goHome} currentUser={user} onImpersonate={async (impersonatedUser) => { sessionStorage.setItem('adminUser', JSON.stringify(user)); handleLoginSuccess(impersonatedUser); }} />;
+            case 'paywall': return <Paywall user={user} onUpgrade={async (tier) => { const fourMonths = 4 * 30.44 * 24 * 60 * 60 * 1000; await handleUpdateUser({ subscriptionTier: tier, subscriptionExpiresAt: Date.now() + fourMonths }); await api.logActivity(user.id, 'upgrade', `Upgraded to ${tier}`); goHome(); }} onCancel={goHome} />;
+            case 'dashboard': return <Dashboard user={user} onGoHome={goHome} onStartWeaknessQuiz={(topics) => { const exam = user.unlockedExams[0] || 'API 510 - Pressure Vessel Inspector'; initiateQuizFlow(exam, 10, false, topics); }} onUpgrade={() => setView('paywall')} />;
+            case 'profile': return <UserProfile user={user} onUpdateUser={handleUpdateUser} onGoHome={goHome} onViewDashboard={() => setView('dashboard')} onManageSubscription={() => setView('paywall')} />;
+            default: return <div>Not Found</div>;
         }
     };
 
+
     return (
-        <div className="App" onMouseMove={handleUserActivity} onKeyDown={handleUserActivity}>
-            {isAdminImpersonating && (
-                <div className="bg-yellow-400 text-black text-center p-2 font-semibold">
-                    You are impersonating a user. <button onClick={stopImpersonating} className="underline font-bold">Return to Admin</button>
-                </div>
-            )}
-            {renderContent()}
+        <div onMouseMove={handleUserActivity} onKeyDown={handleUserActivity}>
+            {view !== 'login' && renderHeader()}
+            <main>
+                <MainContent />
+            </main>
             {pendingUnlock && (
                 <ConfirmDialog
                     open={true}
-                    title="Unlock New Exam?"
+                    title="Unlock Exam?"
                     message={pendingUnlock.message}
                     onCancel={() => setPendingUnlock(null)}
                     onConfirm={async () => {
-                        if (user) {
-                           const updatedUser = await api.updateUser(user.id, { unlockedExams: [...user.unlockedExams, pendingUnlock.examName] });
-                           setUser(updatedUser);
-                           await api.logActivity(user.id, 'unlock', `Unlocked exam: ${pendingUnlock.examName}`);
-                           setQuizSettings({ examName: pendingUnlock.examName, numQuestions: pendingUnlock.numQuestions, isTimed: pendingUnlock.isTimed, examMode: 'open', topics: pendingUnlock.topics });
-                           setPendingUnlock(null);
-                           setView('exam_mode_selection');
-                        }
+                        const { examName, numQuestions, isTimed, topics } = pendingUnlock;
+                        const updatedUser = await api.updateUser(user!.id, { unlockedExams: [...user!.unlockedExams, examName] });
+                        setUser(updatedUser);
+                        await api.logActivity(user!.id, 'unlock', `Unlocked exam: ${examName}.`);
+                        setPendingUnlock(null);
+                        setQuizSettings({ examName, numQuestions, isTimed, examMode: 'open', topics });
+                        setView('exam_mode_selection');
                     }}
                 />
             )}
-            {upsellDialogInfo && (
+             {upsellDialogInfo && (
                 <InfoDialog
                     open={true}
-                    title="Exam Slot Limit Reached"
-                    message={`You have used all your available exam slots. You can purchase one-time access to "${upsellDialogInfo.examName}" to continue.`}
+                    title="All Exam Slots Used"
+                    message="You have used all your available exam slots for your current plan."
                     buttons={[
-                        { text: 'Unlock Now for $250', onClick: handleOneTimeUnlock, style: 'primary' },
-                        { text: 'Back to Homepage', onClick: () => { setUpsellDialogInfo(null); goHome(); }, style: 'neutral' }
+                        { text: 'Unlock for $250', onClick: async () => {
+                            const { examName, numQuestions, isTimed, topics } = upsellDialogInfo;
+                            const updatedUser = await api.updateUser(user!.id, { unlockedExams: [...user!.unlockedExams, examName] });
+                            setUser(updatedUser);
+                            await api.logActivity(user!.id, 'one_time_unlock', `Unlocked additional exam for $250: ${examName}.`);
+                            setUpsellDialogInfo(null);
+                            setQuizSettings({ examName, numQuestions, isTimed, examMode: 'open', topics });
+                            setView('exam_mode_selection');
+                        }, style: 'primary' },
+                        { text: 'View Upgrade Plans', onClick: () => { setUpsellDialogInfo(null); setView('paywall'); }, style: 'secondary' },
+                        { text: 'Maybe Later', onClick: () => setUpsellDialogInfo(null), style: 'neutral' },
                     ]}
                 />
             )}
-            {quizGenerationError && (
-                 <InfoDialog
+             {quizGenerationError && (
+                <InfoDialog
                     open={true}
                     title="Quiz Generation Failed"
-                    message={`There was an error creating your quiz: ${quizGenerationError}. Please try again.`}
+                    message={quizGenerationError}
                     buttons={[
                         { text: 'Try Again', onClick: () => { setQuizGenerationError(null); startQuiz(); }, style: 'primary' },
-                        { text: 'Back to Home', onClick: () => { setQuizGenerationError(null); goHome(); }, style: 'neutral' }
+                        { text: 'Contact Support', onClick: () => { setQuizGenerationError(null); alert('Please contact support at support@inspector.academy'); }, style: 'secondary' },
+                        { text: 'Back to Home', onClick: () => { setQuizGenerationError(null); goHome(); }, style: 'neutral' },
                     ]}
                 />
-            )}
-            {limitReachedDialogInfo && (
+             )}
+             {limitReachedDialogInfo && (
                 <InfoDialog
                     open={true}
                     title="Free Limit Reached"
                     message={limitReachedDialogInfo}
                     buttons={[
-                        { text: 'Upgrade Plan', onClick: () => { setLimitReachedDialogInfo(null); setView('paywall'); }, style: 'primary' },
-                        { text: 'Maybe Later', onClick: () => setLimitReachedDialogInfo(null), style: 'neutral' }
+                         { text: 'View Upgrade Options', onClick: () => { setLimitReachedDialogInfo(null); setView('paywall'); }, style: 'primary' },
+                         { text: 'Maybe Later', onClick: () => setLimitReachedDialogInfo(null), style: 'neutral' },
                     ]}
                 />
+             )}
+            {isReviewing && (
+                <ReviewScreen
+                    questions={questions}
+                    answers={currentQuizAnswers}
+                    onReviewQuestion={(index) => {
+                        setCurrentQuestionIndex(index);
+                        setIsReviewing(false);
+                    }}
+                    onFinalSubmit={finishQuiz}
+                    onCancel={() => setIsReviewing(false)}
+                />
             )}
-            {isIdleWarningVisible && (
+             {isIdleWarningVisible && (
                 <InfoDialog
                     open={true}
                     title="Are you still there?"
-                    message={`Your session will automatically be saved and you will be returned to the homepage in ${idleCountdown} seconds due to inactivity.`}
+                    message={`Your session will automatically save and exit in ${idleCountdown} seconds due to inactivity.`}
                     buttons={[
-                        { text: "I'm still here", onClick: handleUserActivity, style: 'primary' },
+                        { text: "I'm still here", onClick: handleUserActivity, style: 'primary' }
                     ]}
                 />
             )}
