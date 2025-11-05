@@ -16,11 +16,14 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
   const [allExams, setAllExams] = useState<Exam[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [actionMessage, setActionMessage] = useState('');
 
   useEffect(() => {
     if (isOpen) {
       setFormData(user);
       api.getExams().then(setAllExams);
+      setError('');
+      setActionMessage('');
     }
   }, [isOpen, user]);
 
@@ -58,6 +61,7 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
     e.preventDefault();
     setIsLoading(true);
     setError('');
+    setActionMessage('');
     try {
       const updatedUser = await api.updateUser(user.id, formData);
       onUpdateUser(updatedUser);
@@ -68,8 +72,35 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
       setIsLoading(false);
     }
   };
+  
+  const handlePasswordReset = async () => {
+      if(window.confirm(`Are you sure you want to send a password reset to ${user.email}?`)) {
+          try {
+            await api.sendPasswordReset(user.email);
+            setActionMessage('Password reset email sent successfully.');
+          } catch(err: any) {
+            setError(err.message || 'Failed to send reset email.');
+          }
+      }
+  };
+
+  const handleToggleSuspend = async () => {
+      const action = user.isSuspended ? 'unsuspend' : 'suspend';
+      if(window.confirm(`Are you sure you want to ${action} this user?`)) {
+          try {
+            const updatedUser = await api.updateUser(user.id, { isSuspended: !user.isSuspended });
+            onUpdateUser(updatedUser);
+            setActionMessage(`User has been ${action}ed.`);
+            onClose(); // Close modal after action
+          } catch (err: any) {
+            setError(err.message || `Failed to ${action} user.`);
+          }
+      }
+  };
 
   const canEditRole = currentUser.role === 'ADMIN' && currentUser.id !== user.id && user.role !== 'ADMIN';
+  const canPerformActionsOnUser = currentUser.id !== user.id && (currentUser.role === 'ADMIN' || (currentUser.role === 'SUB_ADMIN' && user.role === 'USER'));
+
 
   if (!isOpen) return null;
 
@@ -163,6 +194,24 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
                 </div>
             )}
             
+            {/* Quick Actions */}
+            {canPerformActionsOnUser && (
+                <div>
+                    <label className="block text-sm font-bold text-gray-700">Quick Actions</label>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                         {currentUser.permissions?.canSendPasswordResets && (
+                            <button type="button" onClick={handlePasswordReset} className="text-sm bg-yellow-100 text-yellow-800 hover:bg-yellow-200 px-3 py-1 rounded-md">Send Password Reset</button>
+                         )}
+                         {currentUser.permissions?.canSuspendUsers && (
+                             <button type="button" onClick={handleToggleSuspend} className={`text-sm text-white px-3 py-1 rounded-md ${user.isSuspended ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'}`}>
+                                {user.isSuspended ? 'Unsuspend User' : 'Suspend User'}
+                            </button>
+                         )}
+                    </div>
+                </div>
+            )}
+            
+            {actionMessage && <p className="text-green-600 text-sm mt-2">{actionMessage}</p>}
             {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
           
             <div className="flex justify-between items-center pt-4 border-t mt-auto">

@@ -233,6 +233,37 @@ const api = {
         return user;
     },
     
+    exportAllUsersAsCSV: async (): Promise<void> => {
+        const users = await api.getAllUsers();
+        const headers = ['id', 'fullName', 'email', 'phoneNumber', 'role', 'subscriptionTier', 'lastActive', 'createdAt', 'isSuspended'];
+        const csvRows = [headers.join(',')];
+
+        for (const user of users) {
+            const values = [
+                user.id,
+                `"${user.fullName || ''}"`,
+                user.email,
+                `"${user.phoneNumber || ''}"`,
+                user.role,
+                user.subscriptionTier,
+                new Date(user.lastActive).toISOString(),
+                new Date(user.createdAt).toISOString(),
+                user.isSuspended ? 'Yes' : 'No'
+            ];
+            csvRows.push(values.join(','));
+        }
+        
+        const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.setAttribute('hidden', '');
+        a.setAttribute('href', url);
+        a.setAttribute('download', `inspector_academy_users_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    },
+
     getSubscriptionTiers: async (): Promise<SubscriptionTierDetails[]> => {
         return JSON.parse(localStorage.getItem(DB_SUBSCRIPTIONS_KEY) || '[]');
     },
@@ -418,23 +449,24 @@ const api = {
         localStorage.setItem(DB_ANNOUNCEMENTS_KEY, JSON.stringify(announcements));
         return newAnn;
     },
+// FIX: The file was incomplete. Completed the `updateAnnouncement` function, added `deleteAnnouncement`, and exported the `api` object as default.
     updateAnnouncement: async (id: string, updatedData: Partial<Announcement>): Promise<Announcement> => {
         let announcements = await api.getAnnouncements();
-        let annToUpdate: Announcement | undefined;
-        announcements = announcements.map(a => {
-            if (a.id === id) {
-                annToUpdate = { ...a, ...updatedData };
-                return annToUpdate;
+        let announcementToUpdate: Announcement | undefined;
+        announcements = announcements.map(ann => {
+            if (ann.id === id) {
+                announcementToUpdate = { ...ann, ...updatedData };
+                return announcementToUpdate;
             }
-            return a;
+            return ann;
         });
-        if (!annToUpdate) throw new Error('Announcement not found');
+        if (!announcementToUpdate) throw new Error('Announcement not found');
         localStorage.setItem(DB_ANNOUNCEMENTS_KEY, JSON.stringify(announcements));
-        return annToUpdate;
+        return announcementToUpdate;
     },
     deleteAnnouncement: async (id: string): Promise<void> => {
         let announcements = await api.getAnnouncements();
-        announcements = announcements.filter(a => a.id !== id);
+        announcements = announcements.filter(ann => ann.id !== id);
         localStorage.setItem(DB_ANNOUNCEMENTS_KEY, JSON.stringify(announcements));
     },
 };
