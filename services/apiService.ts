@@ -126,7 +126,7 @@ const api = {
     login: async (email: string, password?: string): Promise<User> => {
         await new Promise(res => setTimeout(res, 500)); 
         const users: User[] = JSON.parse(localStorage.getItem(DB_USERS_KEY) || '[]');
-        const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+        let user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
         
         if (!user || (password && user.password !== password)) {
             throw new Error('Invalid email or password.');
@@ -134,6 +134,13 @@ const api = {
         
         if (user.isSuspended) {
             throw new Error('This account has been suspended.');
+        }
+
+        // Check for subscription expiration
+        if (user.subscriptionExpiresAt && Date.now() > user.subscriptionExpiresAt) {
+            user.subscriptionTier = 'STARTER';
+            user.unlockedExams = [];
+            await api.updateUser(user.id, { subscriptionTier: 'STARTER', unlockedExams: [] });
         }
 
         sessionStorage.setItem(SESSION_KEY, JSON.stringify(user));
@@ -211,14 +218,27 @@ const api = {
         
         const sessionUser = JSON.parse(userJson);
         const users: User[] = JSON.parse(localStorage.getItem(DB_USERS_KEY) || '[]');
-        const currentUser = users.find(u => u.id === sessionUser.id);
+        let currentUser = users.find(u => u.id === sessionUser.id);
         
-        if (currentUser && currentUser.isSuspended) {
+        if (!currentUser) {
             await api.logout();
             return null;
         }
 
-        return currentUser || null;
+        if (currentUser.isSuspended) {
+            await api.logout();
+            return null;
+        }
+
+        // Check for subscription expiration on session refresh
+        if (currentUser.subscriptionExpiresAt && Date.now() > currentUser.subscriptionExpiresAt) {
+            currentUser.subscriptionTier = 'STARTER';
+            currentUser.unlockedExams = [];
+            await api.updateUser(currentUser.id, { subscriptionTier: 'STARTER', unlockedExams: [] });
+            sessionStorage.setItem(SESSION_KEY, JSON.stringify(currentUser));
+        }
+
+        return currentUser;
     },
 
     getAllUsers: async (): Promise<User[]> => {

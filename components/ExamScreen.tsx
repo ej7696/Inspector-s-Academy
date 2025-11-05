@@ -229,7 +229,7 @@ const ExamScreen: React.FC<Props> = ({
               ))}
             </div>
 
-            {isAnswered && (currentQuestion.explanation || currentQuestion.reference) && (
+            {isAnswered && quizSettings.examMode !== 'simulation' && (currentQuestion.explanation || currentQuestion.reference) && (
               <div className="mt-6 p-4 rounded-lg bg-gray-50 border space-y-4">
                   <button onClick={() => setShowExplanation(!showExplanation)} className="font-semibold text-blue-600 hover:underline flex items-center">
                       View Explanation & Reference
@@ -240,7 +240,6 @@ const ExamScreen: React.FC<Props> = ({
                           {currentQuestion.reference && <p><strong className="font-semibold">Reference:</strong> {currentQuestion.reference}</p>}
                           {currentQuestion.explanation && <p><strong className="font-semibold">Rationale:</strong> {currentQuestion.explanation}</p>}
 
-                          {/* Fix: Changed subscription tier names to uppercase to match type. */}
                           {(user.subscriptionTier === 'PROFESSIONAL' || user.subscriptionTier === 'SPECIALIST') && (
                             <div className="pt-4 border-t border-gray-200">
                                 <h4 className="font-semibold text-gray-700 mb-2">Ask a follow-up (Virtual Tutor)</h4>

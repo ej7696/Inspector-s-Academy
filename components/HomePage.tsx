@@ -58,15 +58,7 @@ const HomePage: React.FC<Props> = ({
   };
   
   const getButtonProps = () => {
-    const isPaid = user.subscriptionTier !== 'STARTER';
-    if (!selectedExam) {
-      return { text: 'Select an Exam', disabled: true };
-    }
-    const isUnlocked = user.unlockedExams.includes(selectedExam.name);
-    if (isPaid && !isUnlocked) {
-      return { text: 'Unlock & Start Quiz', disabled: false };
-    }
-    return { text: 'Start Quiz', disabled: false };
+    return { text: 'Start Quiz', disabled: !selectedExam };
   };
 
   const { text: buttonText, disabled: isButtonDisabled } = getButtonProps();

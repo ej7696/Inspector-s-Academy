@@ -271,7 +271,7 @@ const App: React.FC = () => {
     };
     
     const handleNavigate = (destination: 'next' | 'prev' | number) => {
-        if (user?.subscriptionTier === 'STARTER' && currentQuestionIndex >= 4) {
+        if (user?.subscriptionTier === 'STARTER' && currentQuestionIndex === 4 && destination === 'next') {
             setView('paywall');
             return;
         }
