@@ -240,7 +240,8 @@ const ExamScreen: React.FC<Props> = ({
                           {currentQuestion.reference && <p><strong className="font-semibold">Reference:</strong> {currentQuestion.reference}</p>}
                           {currentQuestion.explanation && <p><strong className="font-semibold">Rationale:</strong> {currentQuestion.explanation}</p>}
 
-                          {(user.subscriptionTier === 'Professional' || user.subscriptionTier === 'Specialist') && (
+                          {/* Fix: Changed subscription tier names to uppercase to match type. */}
+                          {(user.subscriptionTier === 'PROFESSIONAL' || user.subscriptionTier === 'SPECIALIST') && (
                             <div className="pt-4 border-t border-gray-200">
                                 <h4 className="font-semibold text-gray-700 mb-2">Ask a follow-up (Virtual Tutor)</h4>
                                 <div className="flex gap-2">

@@ -33,7 +33,16 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
       const { name, checked } = e.target;
       setFormData(prev => ({ 
           ...prev, 
-          permissions: { ...prev.permissions!, [name]: checked }
+          permissions: { 
+              ...(prev.permissions || {
+                  canEditUserDetails: false,
+                  canSendPasswordResets: false,
+                  canManageSubscriptions: false,
+                  canSuspendUsers: false,
+                  canManageAnnouncements: false,
+              }),
+              [name]: checked 
+            }
       }));
   };
 
@@ -89,10 +98,10 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label className="block text-sm font-medium text-gray-700">Subscription Tier</label>
-                    <select name="subscriptionTier" value={formData.subscriptionTier || 'Cadet'} onChange={handleChange} className="w-full mt-1 p-2 border border-gray-300 rounded-md">
-                        <option value="Cadet">Cadet</option>
-                        <option value="Professional">Professional</option>
-                        <option value="Specialist">Specialist</option>
+                    <select name="subscriptionTier" value={formData.subscriptionTier || 'STARTER'} onChange={handleChange} className="w-full mt-1 p-2 border border-gray-300 rounded-md">
+                        <option value="STARTER">Starter</option>
+                        <option value="PROFESSIONAL">Professional</option>
+                        <option value="SPECIALIST">Specialist</option>
                     </select>
                 </div>
                 <div>
@@ -135,7 +144,7 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
             )}
 
             {/* Manual Exam Unlocks */}
-            {formData.subscriptionTier !== 'Cadet' && (
+            {formData.subscriptionTier !== 'STARTER' && (
                 <div>
                     <label className="block text-sm font-bold text-gray-700">Manual Exam Unlocks</label>
                     <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-2">

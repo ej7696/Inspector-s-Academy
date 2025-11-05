@@ -1,7 +1,7 @@
 import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
 import { 
     User, Question, QuizSettings, QuizResult, UserAnswer, InProgressQuizState, ActivityEvent, ActivityEventType, Exam, Announcement,
-    SubscriptionTier, Role 
+    SubscriptionTier, Role, SubscriptionTierDetails 
 } from '../types';
 import { examSourceData } from './examData';
 
@@ -11,6 +11,7 @@ const DB_USERS_KEY = 'academy_users';
 const DB_ACTIVITY_KEY = 'academy_activity';
 const DB_EXAMS_KEY = 'academy_exams';
 const DB_ANNOUNCEMENTS_KEY = 'academy_announcements';
+const DB_SUBSCRIPTIONS_KEY = 'academy_subscriptions';
 const SESSION_KEY = 'currentUser';
 
 let ai: GoogleGenAI;
@@ -47,6 +48,50 @@ const initializeData = () => {
     if (!localStorage.getItem(DB_ACTIVITY_KEY)) {
         localStorage.setItem(DB_ACTIVITY_KEY, JSON.stringify([]));
     }
+    // Always re-seed subscriptions to ensure they are up-to-date with code changes.
+    const initialTiers: SubscriptionTierDetails[] = [
+      {
+        tier: 'STARTER',
+        name: 'Starter',
+        price: 'Free',
+        description: 'For new users exploring limited quizzes and practice exams.',
+        features: [
+          'Access all exam categories',
+          'Generate up to 5 questions per quiz',
+          'Basic question formats'
+        ],
+        isDeemphasized: true,
+      },
+      {
+        tier: 'PROFESSIONAL',
+        name: "Professional",
+        price: '$350 / 4 months',
+        description: 'For users focusing on a single certification (e.g., API 510, 570, 653, etc.).',
+        features: [
+          'Unlimited access for one certification',
+          'Generate unlimited practice questions',
+          'Practice under realistic exam pressure',
+          'Track progress to pinpoint weaknesses',
+          'All Smart Study Tools & Virtual Tutor'
+        ],
+        cta: 'Upgrade to Professional',
+      },
+      {
+        tier: 'SPECIALIST',
+        name: "Specialist",
+        price: '$650 / 4 months',
+        description: 'For users preparing for multiple certifications with full access and advanced features.',
+        features: [
+          'Unlock full access to TWO exam tracks',
+          'All features from the Professional plan',
+          'Cross-exam weakness analysis',
+          'Ideal for broader expertise',
+        ],
+        cta: 'Upgrade to Specialist',
+        isPopular: true,
+      }
+    ];
+    localStorage.setItem(DB_SUBSCRIPTIONS_KEY, JSON.stringify(initialTiers));
 };
 
 
@@ -186,6 +231,10 @@ const api = {
         users.push(user);
         localStorage.setItem(DB_USERS_KEY, JSON.stringify(users));
         return user;
+    },
+    
+    getSubscriptionTiers: async (): Promise<SubscriptionTierDetails[]> => {
+        return JSON.parse(localStorage.getItem(DB_SUBSCRIPTIONS_KEY) || '[]');
     },
 
     // --- Quiz Logic ---

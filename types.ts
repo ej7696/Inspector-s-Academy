@@ -111,3 +111,14 @@ export interface Announcement {
     isActive: boolean;
     createdAt: number;
 }
+
+export interface SubscriptionTierDetails {
+  tier: SubscriptionTier;
+  name: string;
+  price: string;
+  description: string;
+  features: string[];
+  cta?: string;
+  isPopular?: boolean;
+  isDeemphasized?: boolean;
+}

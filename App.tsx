@@ -118,11 +118,11 @@ const App: React.FC = () => {
     };
 
 
-    const goHome = () => {
+    const goHome = useCallback(() => {
         setView('home');
         setError('');
         setQuizResult(null);
-    };
+    }, []);
 
     const handleLoginSuccess = async (loggedInUser: User) => {
         setUser(loggedInUser);
@@ -176,38 +176,36 @@ const App: React.FC = () => {
     
     const initiateQuizFlow = async (examName: string, numQuestions: number, isTimed: boolean, topics?: string) => {
         if (!user) return;
-    
-        // Cadet user check for quiz length
-        if (user.subscriptionTier === 'STARTER' && numQuestions > 5) {
-            setView('paywall');
-            return;
-        }
+
+        // For STARTER plan, the quiz length is always 5, consistent with the plan's features.
+        const finalNumQuestions = user.subscriptionTier === 'STARTER' ? 5 : numQuestions;
 
         const isPaidUser = user.subscriptionTier !== 'STARTER';
         const isUnlocked = user.unlockedExams.includes(examName);
-    
+
         if (isPaidUser && !isUnlocked) {
             const maxUnlocks = user.subscriptionTier === 'PROFESSIONAL' ? 1 : 2;
             if (user.unlockedExams.length >= maxUnlocks) {
-                setUpsellDialogInfo({ examName, numQuestions, isTimed, topics });
+                setUpsellDialogInfo({ examName, numQuestions: finalNumQuestions, isTimed, topics });
                 return;
             }
-    
+
             setPendingUnlock({
                 examName,
                 message: `You have ${maxUnlocks - user.unlockedExams.length} exam slot(s) available. Do you want to use one to unlock "${examName}"? This choice is permanent for your subscription period.`,
-                numQuestions,
+                numQuestions: finalNumQuestions,
                 isTimed,
                 topics
             });
             return;
         }
-    
-        // For Cadets starting a free preview OR paid users starting an unlocked exam
-        setQuizSettings({ examName, numQuestions, isTimed, examMode: 'open', topics: topics?.trim() });
+
+        // For STARTER users OR paid users with unlocked exams
+        setQuizSettings({ examName, numQuestions: finalNumQuestions, isTimed, examMode: 'open', topics: topics?.trim() });
         
         if (user.subscriptionTier === 'STARTER') {
-            startQuiz(); // Bypass mode selection for Cadets
+            // Bypass mode selection for a seamless free preview start
+            startQuiz();
         } else {
             setView('exam_mode_selection');
         }
@@ -220,16 +218,7 @@ const App: React.FC = () => {
         setError('');
         setQuizGenerationError(null);
         try {
-            // In a real scenario, for a 170-question exam, you'd likely fetch this from a pre-generated pool
-            // or generate it in chunks. For this simulation, we'll generate a smaller set.
             const finalNumQuestions = Math.min(quizSettings.numQuestions, 170);
-
-            // Paywall logic for Cadet tier
-            if (user.subscriptionTier === 'STARTER' && questions.length >= 5) {
-                setView('paywall');
-                setIsLoading(false);
-                return;
-            }
 
             const newQuestions = await api.generateQuiz({...quizSettings, numQuestions: finalNumQuestions});
             setQuestions(newQuestions);

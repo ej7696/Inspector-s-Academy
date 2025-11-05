@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { User } from '../types';
+import { User, SubscriptionTier } from '../types';
 
 interface Props {
   user: User;
@@ -55,10 +55,20 @@ const UserProfile: React.FC<Props> = ({ user, onUpdateUser, onGoHome, onViewDash
       return [...new Set(examNames)];
   }, [user.history]);
   
-  const getTierColor = (tier: string) => {
+  const getTierDisplayName = (tier: SubscriptionTier) => {
+      switch(tier) {
+          case 'STARTER': return 'Starter';
+          case 'PROFESSIONAL': return 'Professional';
+          case 'SPECIALIST': return 'Specialist';
+          default: return tier;
+      }
+  };
+
+  const getTierColor = (tier: SubscriptionTier) => {
       switch (tier) {
-          case 'Specialist': return 'bg-green-100 text-green-800';
-          case 'Professional': return 'bg-blue-100 text-blue-800';
+          case 'SPECIALIST': return 'bg-green-100 text-green-800';
+          case 'PROFESSIONAL': return 'bg-blue-100 text-blue-800';
+          case 'STARTER':
           default: return 'bg-gray-100 text-gray-800';
       }
   };
@@ -116,7 +126,7 @@ const UserProfile: React.FC<Props> = ({ user, onUpdateUser, onGoHome, onViewDash
          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
                   <label className="text-sm font-medium text-gray-500">Current Plan</label>
-                  <p className={`text-lg font-semibold px-3 py-1 rounded-full inline-block ${getTierColor(user.subscriptionTier)}`}>{user.subscriptionTier}</p>
+                  <p className={`text-lg font-semibold px-3 py-1 rounded-full inline-block ${getTierColor(user.subscriptionTier)}`}>{getTierDisplayName(user.subscriptionTier)}</p>
                   {user.subscriptionExpiresAt && (
                       <p className="text-sm text-gray-500 mt-2">Your plan is valid until {new Date(user.subscriptionExpiresAt).toLocaleDateString()}.</p>
                   )}
