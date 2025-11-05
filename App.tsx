@@ -574,6 +574,7 @@ const App: React.FC = () => {
                       const examName = user.unlockedExams[0] || 'API 510 - Pressure Vessel Inspector';
                       initiateQuizFlow(examName, 10, false, topics);
                     }}
+                    onUpgrade={() => setView('paywall')}
                 />;
             case 'profile':
                 return user && <UserProfile

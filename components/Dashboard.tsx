@@ -6,9 +6,10 @@ interface Props {
   user: User;
   onGoHome: () => void;
   onStartWeaknessQuiz: (topics: string) => void;
+  onUpgrade: () => void;
 }
 
-const Dashboard: React.FC<Props> = ({ user, onGoHome, onStartWeaknessQuiz }) => {
+const Dashboard: React.FC<Props> = ({ user, onGoHome, onStartWeaknessQuiz, onUpgrade }) => {
   switch (user.subscriptionTier) {
     case 'PROFESSIONAL':
       return <ProfessionalDashboard user={user} onGoHome={onGoHome} onStartWeaknessQuiz={onStartWeaknessQuiz} />;
@@ -16,12 +17,12 @@ const Dashboard: React.FC<Props> = ({ user, onGoHome, onStartWeaknessQuiz }) => 
       return <SpecialistDashboard user={user} onGoHome={onGoHome} onStartWeaknessQuiz={onStartWeaknessQuiz} />;
     case 'STARTER':
     default:
-      return <CadetDashboard user={user} onGoHome={onGoHome} />;
+      return <CadetDashboard user={user} onGoHome={onGoHome} onUpgrade={onUpgrade} />;
   }
 };
 
 // --- Cadet Dashboard ---
-const CadetDashboard: React.FC<{ user: User, onGoHome: () => void }> = ({ user, onGoHome }) => {
+const CadetDashboard: React.FC<{ user: User, onGoHome: () => void, onUpgrade: () => void }> = ({ user, onGoHome, onUpgrade }) => {
     const totalQuestionsAnswered = useMemo(() => {
         return user.history.reduce((acc, result) => acc + result.totalQuestions, 0);
     }, [user.history]);
@@ -54,7 +55,7 @@ const CadetDashboard: React.FC<{ user: User, onGoHome: () => void }> = ({ user, 
                 <div className="absolute inset-0 bg-white bg-opacity-80 flex flex-col items-center justify-center p-4">
                     <h3 className="text-2xl font-bold text-gray-800 mb-2">Unlock Your Performance Analytics</h3>
                     <p className="text-gray-600 mb-4 max-w-md">Upgrade to a paid plan to unlock weakness analysis, performance trend charts, and unlimited quiz history.</p>
-                    <button onClick={onGoHome} className="bg-green-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors">
+                    <button onClick={onUpgrade} className="bg-green-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors">
                         View Upgrade Options
                     </button>
                 </div>
