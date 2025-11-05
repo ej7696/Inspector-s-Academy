@@ -50,6 +50,7 @@ const App: React.FC = () => {
     }>(null);
     const [upsellDialogInfo, setUpsellDialogInfo] = useState<null | { examName: string; numQuestions: number; isTimed: boolean; topics?: string; }>(null);
     const [quizGenerationError, setQuizGenerationError] = useState<string | null>(null);
+    const [limitReachedDialogInfo, setLimitReachedDialogInfo] = useState<string | null>(null);
 
 
     // Idle Timer State
@@ -177,39 +178,68 @@ const App: React.FC = () => {
     const initiateQuizFlow = async (examName: string, numQuestions: number, isTimed: boolean, topics?: string) => {
         if (!user) return;
 
-        // For STARTER plan, the quiz length is always 5, consistent with the plan's features.
-        const finalNumQuestions = user.subscriptionTier === 'STARTER' ? 5 : numQuestions;
+        if (user.subscriptionTier === 'STARTER') {
+            const remainingQuestions = user.monthlyQuestionRemaining ?? 0;
+            const usage = user.monthlyExamUsage ?? {};
+            const usageForThisExam = usage[examName] || 0;
+            const usedExams = Object.keys(usage);
+            const isNewExam = !usedExams.includes(examName);
 
-        const isPaidUser = user.subscriptionTier !== 'STARTER';
+            if (remainingQuestions <= 0) {
+                setLimitReachedDialogInfo("You’ve used all 15 free questions for this month. Upgrade to continue practicing.");
+                return;
+            }
+            if (usageForThisExam >= 5) {
+                setLimitReachedDialogInfo("You’ve used your 5 free questions for this certification. Upgrade to keep practicing.");
+                return;
+            }
+            if (isNewExam && usedExams.length >= 3) {
+                setLimitReachedDialogInfo("You’ve reached your limit of 3 certifications for this month. Upgrade to explore more exams.");
+                return;
+            }
+
+            const allowedQuestions = Math.min(
+                5 - usageForThisExam,
+                remainingQuestions
+            );
+
+            const finalNumQuestions = Math.min(numQuestions, allowedQuestions);
+
+            const newUsage = { ...usage, [examName]: usageForThisExam + finalNumQuestions };
+            const updatedUser = await api.updateUser(user.id, {
+                monthlyQuestionRemaining: remainingQuestions - finalNumQuestions,
+                monthlyExamUsage: newUsage
+            });
+            setUser(updatedUser);
+
+            setQuizSettings({ examName, numQuestions: finalNumQuestions, isTimed: false, examMode: 'open', topics: topics?.trim() });
+            startQuiz();
+            return;
+        }
+
+        // Paid User Logic
         const isUnlocked = user.unlockedExams.includes(examName);
-
-        if (isPaidUser && !isUnlocked) {
+        if (!isUnlocked) {
             const maxUnlocks = user.subscriptionTier === 'PROFESSIONAL' ? 1 : 2;
             if (user.unlockedExams.length >= maxUnlocks) {
-                setUpsellDialogInfo({ examName, numQuestions: finalNumQuestions, isTimed, topics });
+                setUpsellDialogInfo({ examName, numQuestions, isTimed, topics });
                 return;
             }
 
             setPendingUnlock({
                 examName,
                 message: `You have ${maxUnlocks - user.unlockedExams.length} exam slot(s) available. Do you want to use one to unlock "${examName}"? This choice is permanent for your subscription period.`,
-                numQuestions: finalNumQuestions,
+                numQuestions,
                 isTimed,
                 topics
             });
             return;
         }
 
-        // For STARTER users OR paid users with unlocked exams
-        setQuizSettings({ examName, numQuestions: finalNumQuestions, isTimed, examMode: 'open', topics: topics?.trim() });
-        
-        if (user.subscriptionTier === 'STARTER') {
-            // Bypass mode selection for a seamless free preview start
-            startQuiz();
-        } else {
-            setView('exam_mode_selection');
-        }
+        setQuizSettings({ examName, numQuestions, isTimed, examMode: 'open', topics: topics?.trim() });
+        setView('exam_mode_selection');
     };
+
 
     const startQuiz = async () => {
         if (!quizSettings || !user) return;
@@ -271,7 +301,7 @@ const App: React.FC = () => {
     };
     
     const handleNavigate = (destination: 'next' | 'prev' | number) => {
-        if (user?.subscriptionTier === 'STARTER' && currentQuestionIndex === 4 && destination === 'next') {
+        if (user?.subscriptionTier === 'STARTER' && currentQuestionIndex === (questions.length - 1) && destination === 'next') {
             setView('paywall');
             return;
         }
@@ -650,6 +680,17 @@ const App: React.FC = () => {
                     buttons={[
                         { text: 'Try Again', onClick: () => { setQuizGenerationError(null); startQuiz(); }, style: 'primary' },
                         { text: 'Back to Home', onClick: () => { setQuizGenerationError(null); goHome(); }, style: 'neutral' }
+                    ]}
+                />
+            )}
+            {limitReachedDialogInfo && (
+                <InfoDialog
+                    open={true}
+                    title="Free Limit Reached"
+                    message={limitReachedDialogInfo}
+                    buttons={[
+                        { text: 'Upgrade Plan', onClick: () => { setLimitReachedDialogInfo(null); setView('paywall'); }, style: 'primary' },
+                        { text: 'Maybe Later', onClick: () => setLimitReachedDialogInfo(null), style: 'neutral' }
                     ]}
                 />
             )}

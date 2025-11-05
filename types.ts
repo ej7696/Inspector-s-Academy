@@ -89,6 +89,10 @@ export interface User {
   createdAt: number;
   lastActive: number;
   isSuspended?: boolean;
+  // Fields for Monthly Question Bank for STARTER users
+  monthlyQuestionRemaining?: number | null;
+  monthlyExamUsage?: { [examName: string]: number } | null;
+  monthlyResetDate?: number | null;
 }
 
 export type ActivityEventType = 'login' | 'upgrade' | 'unlock' | 'one_time_unlock' | 'quiz_complete';

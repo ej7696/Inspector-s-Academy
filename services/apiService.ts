@@ -14,6 +14,8 @@ const DB_ANNOUNCEMENTS_KEY = 'academy_announcements';
 const DB_SUBSCRIPTIONS_KEY = 'academy_subscriptions';
 const SESSION_KEY = 'currentUser';
 
+const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
+
 let ai: GoogleGenAI;
 
 const defaultPermissions: SubAdminPermissions = {
@@ -38,7 +40,7 @@ const initializeData = () => {
             { id: '2', fullName: 'Sub Admin', email: 'subadmin@test.com', phoneNumber: '555-0102', password: 'subadmin123', role: 'SUB_ADMIN', subscriptionTier: 'SPECIALIST', unlockedExams: [], history: [], createdAt: now, lastActive: now, permissions: { ...defaultPermissions, canEditUsers: true, canSendPasswordResets: true }, isSuspended: false },
             { id: '3', fullName: 'Pro User', email: 'pro@test.com', phoneNumber: '555-0103', password: 'pro123', role: 'USER', subscriptionTier: 'PROFESSIONAL', unlockedExams: [], history: [], createdAt: now, lastActive: now, isSuspended: false },
             { id: '4', fullName: 'Specialist User', email: 'specialist@test.com', phoneNumber: '555-0104', password: 'specialist123', role: 'USER', subscriptionTier: 'SPECIALIST', unlockedExams: [], history: [], createdAt: now, lastActive: now, isSuspended: false },
-            { id: '5', fullName: 'Cadet User', email: 'cadet@test.com', phoneNumber: '555-0105', password: 'user123', role: 'USER', subscriptionTier: 'STARTER', unlockedExams: [], history: [], createdAt: now, lastActive: now, isSuspended: false },
+            { id: '5', fullName: 'Cadet User', email: 'cadet@test.com', phoneNumber: '555-0105', password: 'user123', role: 'USER', subscriptionTier: 'STARTER', unlockedExams: [], history: [], createdAt: now, lastActive: now, isSuspended: false, monthlyQuestionRemaining: 15, monthlyExamUsage: {}, monthlyResetDate: now + THIRTY_DAYS_IN_MS },
         ];
         localStorage.setItem(DB_USERS_KEY, JSON.stringify(initialUsers));
     }
@@ -67,11 +69,12 @@ const initializeData = () => {
         tier: 'STARTER',
         name: 'Starter',
         price: 'Free',
-        description: 'For new users exploring limited quizzes and practice exams.',
+        description: 'Get a preview of our platform with a limited number of practice questions each month.',
         features: [
-          'Access all exam categories',
-          'Generate up to 5 questions per quiz',
-          'Basic question formats'
+          '15 free practice questions per month',
+          'Choose and practice up to 3 different certifications',
+          'Up to 5 practice questions per certification',
+          'Upgrade anytime for unlimited access'
         ],
         isDeemphasized: true,
       },
@@ -125,7 +128,7 @@ const api = {
     
     login: async (email: string, password?: string): Promise<User> => {
         await new Promise(res => setTimeout(res, 500)); 
-        const users: User[] = JSON.parse(localStorage.getItem(DB_USERS_KEY) || '[]');
+        let users: User[] = JSON.parse(localStorage.getItem(DB_USERS_KEY) || '[]');
         let user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
         
         if (!user || (password && user.password !== password)) {
@@ -140,8 +143,31 @@ const api = {
         if (user.subscriptionExpiresAt && Date.now() > user.subscriptionExpiresAt) {
             user.subscriptionTier = 'STARTER';
             user.unlockedExams = [];
-            await api.updateUser(user.id, { subscriptionTier: 'STARTER', unlockedExams: [] });
+            // When subscription expires, reset monthly allowance as well
+            user.monthlyQuestionRemaining = 15;
+            user.monthlyExamUsage = {};
+            user.monthlyResetDate = Date.now() + THIRTY_DAYS_IN_MS;
+            await api.updateUser(user.id, { 
+                subscriptionTier: 'STARTER', 
+                unlockedExams: [],
+                monthlyQuestionRemaining: 15,
+                monthlyExamUsage: {},
+                monthlyResetDate: Date.now() + THIRTY_DAYS_IN_MS,
+            });
         }
+
+        // Check for monthly reset for STARTER users
+        if (user.subscriptionTier === 'STARTER' && user.monthlyResetDate && Date.now() > user.monthlyResetDate) {
+            user.monthlyQuestionRemaining = 15;
+            user.monthlyExamUsage = {};
+            user.monthlyResetDate = Date.now() + THIRTY_DAYS_IN_MS;
+            await api.updateUser(user.id, {
+                monthlyQuestionRemaining: 15,
+                monthlyExamUsage: {},
+                monthlyResetDate: Date.now() + THIRTY_DAYS_IN_MS,
+            });
+        }
+
 
         sessionStorage.setItem(SESSION_KEY, JSON.stringify(user));
         await api.logActivity(user.id, 'login', `User logged in successfully.`);
@@ -234,7 +260,29 @@ const api = {
         if (currentUser.subscriptionExpiresAt && Date.now() > currentUser.subscriptionExpiresAt) {
             currentUser.subscriptionTier = 'STARTER';
             currentUser.unlockedExams = [];
-            await api.updateUser(currentUser.id, { subscriptionTier: 'STARTER', unlockedExams: [] });
+            currentUser.monthlyQuestionRemaining = 15;
+            currentUser.monthlyExamUsage = {};
+            currentUser.monthlyResetDate = Date.now() + THIRTY_DAYS_IN_MS;
+            await api.updateUser(currentUser.id, { 
+                subscriptionTier: 'STARTER', 
+                unlockedExams: [],
+                monthlyQuestionRemaining: 15,
+                monthlyExamUsage: {},
+                monthlyResetDate: Date.now() + THIRTY_DAYS_IN_MS,
+            });
+            sessionStorage.setItem(SESSION_KEY, JSON.stringify(currentUser));
+        }
+
+        // Check for monthly reset for STARTER users
+        if (currentUser.subscriptionTier === 'STARTER' && currentUser.monthlyResetDate && Date.now() > currentUser.monthlyResetDate) {
+            currentUser.monthlyQuestionRemaining = 15;
+            currentUser.monthlyExamUsage = {};
+            currentUser.monthlyResetDate = Date.now() + THIRTY_DAYS_IN_MS;
+            await api.updateUser(currentUser.id, {
+                monthlyQuestionRemaining: 15,
+                monthlyExamUsage: {},
+                monthlyResetDate: Date.now() + THIRTY_DAYS_IN_MS,
+            });
             sessionStorage.setItem(SESSION_KEY, JSON.stringify(currentUser));
         }
 
@@ -292,11 +340,25 @@ const api = {
             createdAt: now,
             lastActive: now,
             isSuspended: false,
+            monthlyQuestionRemaining: 15,
+            monthlyExamUsage: {},
+            monthlyResetDate: now + THIRTY_DAYS_IN_MS,
         };
 
         if (user.role === 'SUB_ADMIN') {
             user.permissions = { ...defaultPermissions };
+            user.monthlyQuestionRemaining = null;
+            user.monthlyExamUsage = null;
+            user.monthlyResetDate = null;
         }
+        
+        if (user.role === 'ADMIN') {
+            user.subscriptionTier = 'SPECIALIST';
+             user.monthlyQuestionRemaining = null;
+            user.monthlyExamUsage = null;
+            user.monthlyResetDate = null;
+        }
+
 
         users.push(user);
         localStorage.setItem(DB_USERS_KEY, JSON.stringify(users));
