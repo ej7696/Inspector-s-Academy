@@ -142,7 +142,7 @@ const api = {
         const updatedUser = { ...user, lastActive: Date.now() };
         api.updateUser(user.id, { lastActive: Date.now() });
 
-        // --- Permissions Audit ---
+        // --- Permissions Audit (Existing) ---
         console.log("--- Permissions Audit ---");
         console.log("🔐 Active Role:", updatedUser.role);
         if (updatedUser.role === 'SUB_ADMIN') {
@@ -160,6 +160,31 @@ const api = {
             console.log("✅ Standard user permissions.");
         }
         console.log("-------------------------");
+
+        // --- Permissions Verification (New) ---
+        const getVerificationLog = (user: User) => {
+            const visibleTabs: string[] = ['Dashboard'];
+            const disabledActions: string[] = [];
+            const restrictedSections: string[] = [];
+
+            if (user.role === 'ADMIN') {
+                visibleTabs.push('User Management', 'Exam Content', 'Announcements');
+            } else if (user.role === 'SUB_ADMIN') {
+                if (user.permissions?.canViewUserList) visibleTabs.push('User Management');
+                if (user.permissions?.canManageExams) visibleTabs.push('Exam Content');
+                if (user.permissions?.canManageAnnouncements) visibleTabs.push('Announcements');
+                
+                if (!user.permissions?.canEditUsers) disabledActions.push('Add User', 'Edit User');
+                if (!user.permissions?.canSuspendUsers) disabledActions.push('Suspend/Unsuspend');
+                if (!user.permissions?.canSendPasswordResets) disabledActions.push('Send Password Reset');
+
+                restrictedSections.push('Role Modification', 'Set Sub-Admin Permissions', 'Impersonate Users');
+            } else { // USER
+                restrictedSections.push('Entire Admin Panel');
+            }
+            return { role: user.role, visibleTabs, disabledActions, restrictedSections };
+        };
+        console.log("Permissions Verification:", getVerificationLog(updatedUser));
 
 
         return updatedUser;
