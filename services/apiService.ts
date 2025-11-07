@@ -1,593 +1,424 @@
-import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
-import { 
-    User, Question, QuizSettings, QuizResult, UserAnswer, InProgressQuizState, ActivityEvent, ActivityEventType, Exam, Announcement,
-    SubscriptionTier, Role, SubscriptionTierDetails, SubAdminPermissions
-} from '../types';
+import { GoogleGenAI, Type } from "@google/genai";
+import { User, Question, ActivityEvent, Exam, Announcement, SubscriptionTierDetails, Role, QuizResult, InProgressQuizState, InProgressAnswer, UserAnswer } from '../types';
+import { seedData } from './seedData';
 import { examSourceData } from './examData';
 
-// --- MOCK DATABASE (using localStorage) ---
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-const DB_USERS_KEY = 'academy_users';
-const DB_ACTIVITY_KEY = 'academy_activity';
-const DB_EXAMS_KEY = 'academy_exams';
-const DB_ANNOUNCEMENTS_KEY = 'academy_announcements';
-const DB_SUBSCRIPTIONS_KEY = 'academy_subscriptions';
-const SESSION_KEY = 'currentUser';
-
-const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
-
-let ai: GoogleGenAI;
-
-const defaultPermissions: SubAdminPermissions = {
-    canViewUserList: true,
-    canEditUsers: false,
-    canSendPasswordResets: false,
-    canManageAnnouncements: false,
-    canManageExams: false,
-    canAccessPerformanceAnalytics: false,
-    canViewBillingSummary: false,
-    canManageSubscriptions: false,
-    canViewActivityLogs: false,
-    canSuspendUsers: false,
+const LOCAL_STORAGE_KEYS = {
+  USERS: 'inspectors_academy_users',
+  ANNOUNCEMENTS: 'inspectors_academy_announcements',
+  EXAMS: 'inspectors_academy_exams',
+  ACTIVITY: 'inspectors_academy_activity',
+  LOGGED_IN_USER: 'inspectors_academy_logged_in_user',
+  SUBSCRIPTION_TIERS: 'inspectors_academy_subscription_tiers',
 };
 
-// Initialize and seed data if DB is empty
-const initializeData = () => {
-    if (!localStorage.getItem(DB_USERS_KEY)) {
-        const now = Date.now();
-        const initialUsers: User[] = [
-            { id: '1', fullName: 'Admin User', email: 'admin@test.com', phoneNumber: '555-0101', password: 'admin123', role: 'ADMIN', subscriptionTier: 'SPECIALIST', unlockedExams: [], history: [], createdAt: now, lastActive: now, isSuspended: false },
-            { id: '2', fullName: 'Sub Admin', email: 'subadmin@test.com', phoneNumber: '555-0102', password: 'subadmin123', role: 'SUB_ADMIN', subscriptionTier: 'SPECIALIST', unlockedExams: [], history: [], createdAt: now, lastActive: now, permissions: { ...defaultPermissions, canEditUsers: true, canSendPasswordResets: true }, isSuspended: false },
-            { id: '3', fullName: 'Pro User', email: 'pro@test.com', phoneNumber: '555-0103', password: 'pro123', role: 'USER', subscriptionTier: 'PROFESSIONAL', unlockedExams: [], history: [], createdAt: now, lastActive: now, isSuspended: false },
-            { id: '4', fullName: 'Specialist User', email: 'specialist@test.com', phoneNumber: '555-0104', password: 'specialist123', role: 'USER', subscriptionTier: 'SPECIALIST', unlockedExams: [], history: [], createdAt: now, lastActive: now, isSuspended: false },
-            { id: '5', fullName: 'Cadet User', email: 'cadet@test.com', phoneNumber: '555-0105', password: 'user123', role: 'USER', subscriptionTier: 'STARTER', unlockedExams: [], history: [], createdAt: now, lastActive: now, isSuspended: false, monthlyQuestionRemaining: 15, monthlyExamUsage: {}, monthlyResetDate: now + THIRTY_DAYS_IN_MS },
-        ];
-        localStorage.setItem(DB_USERS_KEY, JSON.stringify(initialUsers));
-    }
-    if (!localStorage.getItem(DB_EXAMS_KEY)) {
-        const initialExams: Exam[] = Object.keys(examSourceData).map((examName, index) => ({
-            id: `exam_${index + 1}`,
-            name: examName,
-            effectivitySheet: examSourceData[examName].effectivitySheet,
-            bodyOfKnowledge: examSourceData[examName].bodyOfKnowledge,
-            isActive: true,
-        }));
-        localStorage.setItem(DB_EXAMS_KEY, JSON.stringify(initialExams));
-    }
-    if (!localStorage.getItem(DB_ANNOUNCEMENTS_KEY)) {
-        const initialAnnouncements: Announcement[] = [
-            { id: 'announce_1', message: 'Welcome to the new Inspector\'s Academy! We have updated our exam content for 2026.', isActive: true, createdAt: Date.now() }
-        ];
-        localStorage.setItem(DB_ANNOUNCEMENTS_KEY, JSON.stringify(initialAnnouncements));
-    }
-    if (!localStorage.getItem(DB_ACTIVITY_KEY)) {
-        localStorage.setItem(DB_ACTIVITY_KEY, JSON.stringify([]));
-    }
-    // Always re-seed subscriptions to ensure they are up-to-date with code changes.
-    const initialTiers: SubscriptionTierDetails[] = [
-      {
-        tier: 'STARTER',
-        name: 'Starter',
-        price: 'Free',
-        description: 'Get a preview of our platform with a limited number of practice questions each month.',
-        features: [
-          '15 free practice questions per month',
-          'Choose and practice up to 3 different certifications',
-          'Up to 5 practice questions per certification',
-          'Upgrade anytime for unlimited access'
-        ],
-        isDeemphasized: true,
-      },
-      {
-        tier: 'PROFESSIONAL',
-        name: "Professional",
-        price: '$350 / 4 months',
-        description: 'For users focusing on a single certification (e.g., API 510, 570, 653, etc.).',
-        features: [
-          'Unlimited access for one certification',
-          'Generate unlimited practice questions',
-          'Practice under realistic exam pressure',
-          'Track progress to pinpoint weaknesses',
-          'All Smart Study Tools & Virtual Tutor'
-        ],
-        cta: 'Upgrade to Professional',
-      },
-      {
-        tier: 'SPECIALIST',
-        name: "Specialist",
-        price: '$650 / 4 months',
-        description: 'For users preparing for multiple certifications with full access and advanced features.',
-        features: [
-          'Unlock full access to TWO exam tracks',
-          'All features from the Professional plan',
-          'Cross-exam weakness analysis',
-          'Ideal for broader expertise',
-        ],
-        cta: 'Upgrade to Specialist',
-        isPopular: true,
-      }
-    ];
-    localStorage.setItem(DB_SUBSCRIPTIONS_KEY, JSON.stringify(initialTiers));
-};
+class ApiService {
+  constructor() {
+    this.initializeData();
+  }
 
+  initializeData() {
+    if (!localStorage.getItem(LOCAL_STORAGE_KEYS.USERS)) {
+      localStorage.setItem(LOCAL_STORAGE_KEYS.USERS, JSON.stringify(seedData.users));
+    }
+    if (!localStorage.getItem(LOCAL_STORAGE_KEYS.ANNOUNCEMENTS)) {
+      localStorage.setItem(LOCAL_STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(seedData.announcements));
+    }
+    if (!localStorage.getItem(LOCAL_STORAGE_KEYS.EXAMS)) {
+       const examsFromSource = Object.entries(examSourceData).map(([name, data], index) => ({
+          id: `exam-${index + 1}`,
+          name,
+          ...data,
+          isActive: true
+       }));
+       localStorage.setItem(LOCAL_STORAGE_KEYS.EXAMS, JSON.stringify(examsFromSource));
+    }
+    if (!localStorage.getItem(LOCAL_STORAGE_KEYS.ACTIVITY)) {
+      localStorage.setItem(LOCAL_STORAGE_KEYS.ACTIVITY, JSON.stringify(seedData.activityFeed));
+    }
+     if (!localStorage.getItem(LOCAL_STORAGE_KEYS.SUBSCRIPTION_TIERS)) {
+      localStorage.setItem(LOCAL_STORAGE_KEYS.SUBSCRIPTION_TIERS, JSON.stringify(seedData.subscriptionTiers));
+    }
+  }
 
-// --- API Service Definition ---
-
-const api = {
-    // --- Initialization ---
-    initialize: () => {
-        initializeData();
-        if (process.env.API_KEY) {
-           ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        } else {
-           console.error("API_KEY environment variable not set. Quiz generation will fail.");
-        }
-    },
-
-    // --- User & Auth ---
+  checkAndResetMonthlyLimits(user: User): User {
+    if (user.subscriptionTier !== 'STARTER' || !user.monthlyResetDate || Date.now() < user.monthlyResetDate) {
+      return user;
+    }
     
-    login: async (email: string, password?: string): Promise<User> => {
-        await new Promise(res => setTimeout(res, 500)); 
-        const users: User[] = JSON.parse(localStorage.getItem(DB_USERS_KEY) || '[]');
-        let user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-        
-        if (!user || (password && user.password !== password)) {
-            throw new Error('Invalid email or password.');
-        }
-        
-        if (user.isSuspended) {
-            throw new Error('This account has been suspended.');
-        }
+    // Time to reset
+    console.log(`Resetting monthly limits for ${user.email}`);
+    const updates = {
+      monthlyQuestionRemaining: 15,
+      monthlyExamUsage: {},
+      monthlyResetDate: Date.now() + 30 * 24 * 60 * 60 * 1000,
+    };
+    return this.updateUser(user.id, updates);
+  }
 
-        let userForSession = user;
+  recordStarterUsage(userId: string, examName: string, numQuestions: number): User {
+    const users = this.getAllUsers();
+    const user = users.find(u => u.id === userId);
 
-        // Check for subscription expiration
-        if (user.subscriptionTier !== 'STARTER' && user.subscriptionExpiresAt && Date.now() > user.subscriptionExpiresAt) {
-            const downgradedData = { 
-                subscriptionTier: 'STARTER' as SubscriptionTier, 
-                unlockedExams: [],
-                monthlyQuestionRemaining: 15,
-                monthlyExamUsage: {},
-                monthlyResetDate: Date.now() + THIRTY_DAYS_IN_MS,
-            };
-            userForSession = await api.updateUser(user.id, downgradedData);
-        } else if (user.subscriptionTier === 'STARTER' && user.monthlyResetDate && Date.now() > user.monthlyResetDate) {
-            // Check for monthly reset for STARTER users
-            const resetData = {
-                monthlyQuestionRemaining: 15,
-                monthlyExamUsage: {},
-                monthlyResetDate: Date.now() + THIRTY_DAYS_IN_MS,
-            };
-            userForSession = await api.updateUser(user.id, resetData);
-        }
-        
-        const finalUser = { ...userForSession, lastActive: Date.now() };
-        await api.updateUser(finalUser.id, { lastActive: Date.now() });
+    if (!user || user.subscriptionTier !== 'STARTER') {
+      return user || this.getCurrentUser()!;
+    }
+    
+    const newRemaining = (user.monthlyQuestionRemaining || 0) - numQuestions;
+    const newExamUsage = { 
+      ...user.monthlyExamUsage, 
+      [examName]: (user.monthlyExamUsage?.[examName] || 0) + numQuestions 
+    };
 
-        sessionStorage.setItem(SESSION_KEY, JSON.stringify(finalUser));
-        await api.logActivity(finalUser.id, 'login', `User logged in successfully.`);
-        
-        // --- Permissions Audit (Existing) ---
-        console.log("--- Permissions Audit ---");
-        console.log("🔐 Active Role:", finalUser.role);
-        if (finalUser.role === 'SUB_ADMIN') {
-            console.log("✅ Enabled Permissions:", finalUser.permissions);
-            const hiddenActions = Object.keys(defaultPermissions).reduce((acc, key) => {
-                if (!finalUser.permissions || !finalUser.permissions[key as keyof SubAdminPermissions]) {
-                    acc[key] = false;
-                }
-                return acc;
-            }, {} as any);
-            console.log("🚫 Restricted Actions:", hiddenActions);
-        } else if (finalUser.role === 'ADMIN') {
-            console.log("✅ Full admin permissions enabled.");
-        } else {
-            console.log("✅ Standard user permissions.");
-        }
-        console.log("-------------------------");
+    return this.updateUser(userId, {
+      monthlyQuestionRemaining: newRemaining,
+      monthlyExamUsage: newExamUsage,
+    });
+  }
+  
+  // --- Auth ---
+  async login(email: string, password: string): Promise<User> {
+    const users = this.getAllUsers();
+    let user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    if (!user || user.password !== password) {
+      throw new Error('Invalid email or password.');
+    }
+    if (user.isSuspended) {
+      throw new Error('This account has been suspended.');
+    }
 
-        // --- Permissions Verification (New) ---
-        const getVerificationLog = (user: User) => {
-            const visibleTabs: string[] = ['Dashboard'];
-            const disabledActions: string[] = [];
-            const restrictedSections: string[] = [];
+    user = this.checkAndResetMonthlyLimits(user);
 
-            if (user.role === 'ADMIN') {
-                visibleTabs.push('User Management', 'Exam Content', 'Announcements');
-            } else if (user.role === 'SUB_ADMIN') {
-                if (user.permissions?.canViewUserList) visibleTabs.push('User Management');
-                if (user.permissions?.canManageExams) visibleTabs.push('Exam Content');
-                if (user.permissions?.canManageAnnouncements) visibleTabs.push('Announcements');
-                
-                if (!user.permissions?.canEditUsers) disabledActions.push('Add User', 'Edit User');
-                if (!user.permissions?.canSuspendUsers) disabledActions.push('Suspend/Unsuspend');
-                if (!user.permissions?.canSendPasswordResets) disabledActions.push('Send Password Reset');
+    user.lastActive = Date.now();
+    this.updateUser(user.id, { lastActive: user.lastActive });
+    localStorage.setItem(LOCAL_STORAGE_KEYS.LOGGED_IN_USER, user.id);
+    this.logActivity('login', 'logged in.', user.id, user.email);
+    return user;
+  }
 
-                restrictedSections.push('Role Modification', 'Set Sub-Admin Permissions', 'Impersonate Users');
-            } else { // USER
-                restrictedSections.push('Entire Admin Panel');
-            }
-            return { role: user.role, visibleTabs, disabledActions, restrictedSections };
-        };
-        console.log("Permissions Verification:", getVerificationLog(finalUser));
+  logout() {
+    localStorage.removeItem(LOCAL_STORAGE_KEYS.LOGGED_IN_USER);
+  }
 
+  getCurrentUser(): User | null {
+    const userId = localStorage.getItem(LOCAL_STORAGE_KEYS.LOGGED_IN_USER);
+    if (!userId) return null;
+    const users = this.getAllUsers();
+    return users.find(u => u.id === userId) || null;
+  }
 
-        return finalUser;
-    },
-
-    logout: async (): Promise<void> => {
-        sessionStorage.removeItem(SESSION_KEY);
-    },
-
-    sendPasswordReset: async (email: string): Promise<void> => {
-        await new Promise(res => setTimeout(res, 500));
-        const users: User[] = JSON.parse(localStorage.getItem(DB_USERS_KEY) || '[]');
-        const userExists = users.some(u => u.email.toLowerCase() === email.toLowerCase());
-        if (!userExists) {
-            throw new Error("No account found with that email address.");
-        }
-        console.log(`Password reset email sent to ${email}`);
-        alert(`A password reset link has been sent to ${email}.`);
-    },
-
-    checkSession: async (): Promise<User | null> => {
-        const userJson = sessionStorage.getItem(SESSION_KEY);
-        if (!userJson) return null;
-        
-        const sessionUser = JSON.parse(userJson);
-        const users: User[] = JSON.parse(localStorage.getItem(DB_USERS_KEY) || '[]');
-        let currentUser = users.find(u => u.id === sessionUser.id);
-        
-        if (!currentUser) {
-            await api.logout();
-            return null;
-        }
-
-        if (currentUser.isSuspended) {
-            await api.logout();
-            return null;
-        }
-
-        let userForSession = currentUser;
-
-        // Check for subscription expiration on session refresh
-        if (currentUser.subscriptionTier !== 'STARTER' && currentUser.subscriptionExpiresAt && Date.now() > currentUser.subscriptionExpiresAt) {
-             userForSession = await api.updateUser(currentUser.id, { 
-                subscriptionTier: 'STARTER', 
-                unlockedExams: [],
-                monthlyQuestionRemaining: 15,
-                monthlyExamUsage: {},
-                monthlyResetDate: Date.now() + THIRTY_DAYS_IN_MS,
-            });
-        } else if (currentUser.subscriptionTier === 'STARTER' && currentUser.monthlyResetDate && Date.now() > currentUser.monthlyResetDate) {
-            // Check for monthly reset for STARTER users
-            userForSession = await api.updateUser(currentUser.id, {
-                monthlyQuestionRemaining: 15,
-                monthlyExamUsage: {},
-                monthlyResetDate: Date.now() + THIRTY_DAYS_IN_MS,
-            });
-        }
-
-        sessionStorage.setItem(SESSION_KEY, JSON.stringify(userForSession));
-        return userForSession;
-    },
-
-    getAllUsers: async (): Promise<User[]> => {
-        return JSON.parse(localStorage.getItem(DB_USERS_KEY) || '[]');
-    },
-
-    updateUser: async (userId: string, updatedData: Partial<User>): Promise<User> => {
-        let users: User[] = JSON.parse(localStorage.getItem(DB_USERS_KEY) || '[]');
-        let userToUpdate: User | undefined;
-        
-        users = users.map(u => {
-            if (u.id === userId) {
-                const wasNotSubAdmin = u.role !== 'SUB_ADMIN';
-                const isNowSubAdmin = updatedData.role === 'SUB_ADMIN';
-                const finalData = { ...u, ...updatedData };
-
-                if(wasNotSubAdmin && isNowSubAdmin && !finalData.permissions) {
-                    finalData.permissions = { ...defaultPermissions };
-                }
-
-                userToUpdate = finalData;
-                return userToUpdate;
-            }
-            return u;
-        });
-
-        if (!userToUpdate) throw new Error('User not found.');
-
-        localStorage.setItem(DB_USERS_KEY, JSON.stringify(users));
-        
-        const sessionUserJson = sessionStorage.getItem(SESSION_KEY);
-        if (sessionUserJson) {
-            const sessionUser = JSON.parse(sessionUserJson);
-            if (sessionUser.id === userId) {
-                sessionStorage.setItem(SESSION_KEY, JSON.stringify(userToUpdate));
-            }
-        }
-        
+  // --- Users ---
+  getAllUsers(): User[] {
+    return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.USERS) || '[]');
+  }
+  
+  updateUser(userId: string, updates: Partial<User>, silent: boolean = false): User {
+    let users = this.getAllUsers();
+    let userToUpdate: User | undefined;
+    users = users.map(u => {
+      if (u.id === userId) {
+        userToUpdate = { ...u, ...updates };
         return userToUpdate;
-    },
+      }
+      return u;
+    });
+    if (!userToUpdate) throw new Error('User not found');
+    localStorage.setItem(LOCAL_STORAGE_KEYS.USERS, JSON.stringify(users));
 
-    addUser: async (newUser: Omit<User, 'id' | 'subscriptionTier' | 'unlockedExams' | 'history' | 'inProgressQuiz' | 'createdAt' | 'lastActive'>): Promise<User> => {
-        let users: User[] = JSON.parse(localStorage.getItem(DB_USERS_KEY) || '[]');
-        if (users.some(u => u.email.toLowerCase() === newUser.email.toLowerCase())) {
-            throw new Error('An account with this email already exists.');
-        }
-        const now = Date.now();
-        const user: User = {
-            ...newUser,
-            id: `user_${now}`,
-            subscriptionTier: 'STARTER',
-            unlockedExams: [],
-            history: [],
-            createdAt: now,
-            lastActive: now,
-            isSuspended: false,
-            monthlyQuestionRemaining: 15,
-            monthlyExamUsage: {},
-            monthlyResetDate: now + THIRTY_DAYS_IN_MS,
-        };
+    // If updating the currently logged-in user, also update their session marker
+    // unless it's a silent background update.
+    const loggedInId = localStorage.getItem(LOCAL_STORAGE_KEYS.LOGGED_IN_USER);
+    if (!silent && loggedInId === userId) {
+        // This part is tricky in a localStorage setup. Re-serializing the user isn't ideal.
+        // The App component should handle updating its own state.
+    }
 
-        if (user.role === 'SUB_ADMIN') {
-            user.permissions = { ...defaultPermissions };
-            user.monthlyQuestionRemaining = null;
-            user.monthlyExamUsage = null;
-            user.monthlyResetDate = null;
-        }
-        
-        if (user.role === 'ADMIN') {
-            user.subscriptionTier = 'SPECIALIST';
-             user.monthlyQuestionRemaining = null;
-            user.monthlyExamUsage = null;
-            user.monthlyResetDate = null;
-        }
+    return userToUpdate;
+  }
 
+  addUser(newUser: Omit<User, 'id' | 'subscriptionTier' | 'unlockedExams' | 'history' | 'inProgressQuiz' | 'createdAt' | 'lastActive' | 'monthlyQuestionRemaining' | 'monthlyExamUsage' | 'monthlyResetDate' | 'permissions' | 'subscriptionExpiresAt' | 'isSuspended'>): User {
+    const users = this.getAllUsers();
+    if (users.some(u => u.email.toLowerCase() === newUser.email.toLowerCase())) {
+        throw new Error('A user with this email already exists.');
+    }
+    const now = Date.now();
+    const user: User = {
+      id: `user-${Date.now()}`,
+      ...newUser,
+      subscriptionTier: 'STARTER',
+      unlockedExams: [],
+      history: [],
+      createdAt: now,
+      lastActive: now,
+      monthlyQuestionRemaining: 15,
+      monthlyExamUsage: {},
+      monthlyResetDate: now + 30 * 24 * 60 * 60 * 1000,
+    };
+    users.push(user);
+    localStorage.setItem(LOCAL_STORAGE_KEYS.USERS, JSON.stringify(users));
+    return user;
+  }
 
-        users.push(user);
-        localStorage.setItem(DB_USERS_KEY, JSON.stringify(users));
-        return user;
-    },
-    
-    exportAllUsersAsCSV: async (): Promise<void> => {
-        const users = await api.getAllUsers();
-        const headers = ['id', 'fullName', 'email', 'phoneNumber', 'role', 'subscriptionTier', 'lastActive', 'createdAt', 'isSuspended'];
-        const csvRows = [headers.join(',')];
+  async sendPasswordReset(email: string): Promise<void> {
+    console.log(`Password reset sent to ${email}`);
+    // In a real app, this would trigger a backend service.
+    return Promise.resolve();
+  }
 
-        for (const user of users) {
-            const values = [
-                user.id,
-                `"${user.fullName || ''}"`,
-                user.email,
-                `"${user.phoneNumber || ''}"`,
-                user.role,
-                user.subscriptionTier,
-                new Date(user.lastActive).toISOString(),
-                new Date(user.createdAt).toISOString(),
-                user.isSuspended ? 'Yes' : 'No'
-            ];
-            csvRows.push(values.join(','));
-        }
-        
-        const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.setAttribute('hidden', '');
-        a.setAttribute('href', url);
-        a.setAttribute('download', `inspector_academy_users_${new Date().toISOString().split('T')[0]}.csv`);
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-    },
+  exportAllUsersAsCSV() {
+    const users = this.getAllUsers();
+    const headers = ['id', 'fullName', 'email', 'subscriptionTier', 'role', 'createdAt', 'lastActive'];
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(','), ...users.map(u => headers.map(h => JSON.stringify(u[h as keyof User])).join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "users_export.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
 
-    getSubscriptionTiers: async (): Promise<SubscriptionTierDetails[]> => {
-        return JSON.parse(localStorage.getItem(DB_SUBSCRIPTIONS_KEY) || '[]');
-    },
-
-    // --- Quiz Logic ---
-
-    generateQuiz: async (settings: QuizSettings): Promise<Question[]> => {
-        if (!ai) throw new Error("AI Client not initialized. Check API Key.");
-        
-        const { examName, numQuestions, examMode, topics } = settings;
-        const source = examSourceData[examName] || { effectivitySheet: 'General Knowledge', bodyOfKnowledge: 'General Knowledge' };
-        
-        const modeForPrompt = examMode === 'simulation' ? 'closed-book' : examMode;
-
-        const prompt = `
-        You are a certified API/AWS/NDT exam instructor creating official-style mock questions.
-        Generate ${numQuestions} unique, high-quality multiple-choice questions for the "${examName}" certification exam (${modeForPrompt} mode).
-        Use the official latest Body of Knowledge and Effectivity Sheet provided below, ensuring the same difficulty and structure as the real certification.
-        ${topics ? `The user wants to focus specifically on these topics: ${topics}. Ensure a significant portion of the questions target these areas.` : ''}
-
-        - For open-book style, emphasize clause lookups and calculations (show formula or step-based logic in explanation).
-        - For closed-book, emphasize conceptual recall and judgment.
-        - Each question must be distinct and challenging.
-        - The "answer" field must EXACTLY match one of the four options, including the leading "A) ", "B) ", etc.
-        - Provide a concise but thorough "explanation".
-        - Provide a specific "reference" from the source documents.
-        - Provide a relevant "category" for the question.
-
-        SOURCE DOCUMENTS:
-        ---
-        Effectivity Sheet:
-        ${source.effectivitySheet}
-        ---
-        Body of Knowledge:
-        ${source.bodyOfKnowledge}
-        ---
-        `;
-
-        const responseSchema = {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              question: { type: Type.STRING },
-              options: { type: Type.ARRAY, items: { type: Type.STRING } },
-              answer: { type: Type.STRING },
-              reference: { type: Type.STRING },
-              explanation: { type: Type.STRING },
-              category: { type: Type.STRING },
-            },
-            required: ["question", "options", "answer", "explanation", "reference", "category"]
+  // --- Exams ---
+  getExams(): Exam[] {
+    return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.EXAMS) || '[]');
+  }
+  addExam(exam: Omit<Exam, 'id'>): Exam {
+      const exams = this.getExams();
+      const newExam: Exam = { id: `exam-${Date.now()}`, ...exam };
+      exams.push(newExam);
+      localStorage.setItem(LOCAL_STORAGE_KEYS.EXAMS, JSON.stringify(exams));
+      return newExam;
+  }
+  updateExam(examId: string, updates: Partial<Exam>): Exam {
+      let exams = this.getExams();
+      let updatedExam: Exam | undefined;
+      exams = exams.map(e => {
+          if (e.id === examId) {
+              updatedExam = { ...e, ...updates };
+              return updatedExam;
           }
-        };
+          return e;
+      });
+      if (!updatedExam) throw new Error('Exam not found');
+      localStorage.setItem(LOCAL_STORAGE_KEYS.EXAMS, JSON.stringify(exams));
+      return updatedExam;
+  }
+  deleteExam(examId: string): void {
+      let exams = this.getExams();
+      exams = exams.filter(e => e.id !== examId);
+      localStorage.setItem(LOCAL_STORAGE_KEYS.EXAMS, JSON.stringify(exams));
+  }
 
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-pro',
-          contents: prompt,
-          config: {
-              responseMimeType: "application/json",
-              responseSchema,
+
+  // --- Announcements ---
+  getAnnouncements(): Announcement[] {
+    return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.ANNOUNCEMENTS) || '[]');
+  }
+  addAnnouncement(ann: Omit<Announcement, 'id' | 'createdAt'>): Announcement {
+      const announcements = this.getAnnouncements();
+      const newAnn: Announcement = { id: `ann-${Date.now()}`, createdAt: Date.now(), ...ann };
+      announcements.push(newAnn);
+      localStorage.setItem(LOCAL_STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(announcements));
+      return newAnn;
+  }
+  updateAnnouncement(annId: string, updates: Partial<Announcement>): Announcement {
+      let announcements = this.getAnnouncements();
+      let updatedAnn: Announcement | undefined;
+      announcements = announcements.map(a => {
+          if (a.id === annId) {
+              updatedAnn = { ...a, ...updates };
+              return updatedAnn;
           }
-        });
+          return a;
+      });
+      if (!updatedAnn) throw new Error('Announcement not found');
+      localStorage.setItem(LOCAL_STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(announcements));
+      return updatedAnn;
+  }
+  deleteAnnouncement(annId: string): void {
+      let announcements = this.getAnnouncements();
+      announcements = announcements.filter(a => a.id !== annId);
+      localStorage.setItem(LOCAL_STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(announcements));
+  }
 
-        const jsonText = response.text.trim();
-        const generatedQuestions = JSON.parse(jsonText);
-        
-        if (!Array.isArray(generatedQuestions) || generatedQuestions.length === 0) {
-            throw new Error("The AI failed to generate a valid set of questions. Please try again.");
+  // --- Subscriptions ---
+  getSubscriptionTiers(): SubscriptionTierDetails[] {
+     return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.SUBSCRIPTION_TIERS) || '[]');
+  }
+
+  // --- Activity ---
+  fetchActivityFeed(): ActivityEvent[] {
+    return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.ACTIVITY) || '[]').sort((a: ActivityEvent, b: ActivityEvent) => b.timestamp - a.timestamp);
+  }
+
+  logActivity(type: ActivityEvent['type'], message: string, userId: string, userEmail: string) {
+    const feed = this.fetchActivityFeed();
+    const newEvent: ActivityEvent = {
+      id: `act-${Date.now()}`,
+      userId,
+      userEmail,
+      type,
+      message,
+      timestamp: Date.now(),
+    };
+    feed.unshift(newEvent);
+    localStorage.setItem(LOCAL_STORAGE_KEYS.ACTIVITY, JSON.stringify(feed.slice(0, 100))); // Keep last 100 events
+  }
+
+  // --- AI Generation ---
+  async generateQuestions(examName: string, numQuestions: number, topics?: string): Promise<Question[]> {
+    const examData = this.getExams().find(e => e.name === examName);
+    if (!examData) {
+      throw new Error("Exam data not found.");
+    }
+    
+    const { bodyOfKnowledge, effectivitySheet } = examData;
+
+    const questionSchema = {
+      type: Type.OBJECT,
+      properties: {
+        question: { type: Type.STRING, description: "The question text. Must be challenging and based on the provided documents." },
+        type: { type: Type.STRING, enum: ['multiple-choice', 'true-false'], description: "The type of question." },
+        options: { 
+          type: Type.ARRAY, 
+          items: { type: Type.STRING }, 
+          description: "An array of 4 strings for multiple-choice options. For true-false questions, this should be an empty array or not present." 
+        },
+        answer: { type: Type.STRING, description: "The correct answer. For multiple-choice, it must exactly match one of the options. For true-false, it must be 'True' or 'False'." },
+        reference: { type: Type.STRING, description: "A specific citation from the source documents (e.g., 'API 510, Section 5.3.2' or 'ASME Section IX, QW-100')." },
+        explanation: { type: Type.STRING, description: "A detailed rationale explaining why the answer is correct and the other options are incorrect, citing the reference document." },
+        category: { type: Type.STRING, description: "A relevant category from the Body of Knowledge (e.g., 'Welding', 'NDE', 'Corrosion Rates')." },
+      },
+      required: ['question', 'type', 'answer', 'reference', 'explanation', 'category']
+    };
+
+    const prompt = `You are an expert curriculum developer creating a practice exam for the "${examName}" certification. Your task is to generate ${numQuestions} challenging, exam-caliber questions based *exclusively* on the provided Body of Knowledge and Effectivity Sheet.
+
+    **Key Instructions:**
+    1.  **Source Material:** Adhere strictly to the content within the Body of Knowledge and Effectivity Sheet. Do not introduce outside information.
+    2.  **Question Style:** Questions should be complex, requiring careful reading and application of the rules, not just simple recall.
+    3.  **Answer & Options:** For multiple-choice questions, provide four distinct options. One must be unambiguously correct, and the others should be plausible but incorrect distractors. For true/false, the answer must be 'True' or 'False'.
+    4.  **Reference & Explanation:** Every question MUST include a specific reference to the document and section (e.g., "API 510, 7.4.2" or "ASME Sec IX, QW-202.1") and a detailed explanation.
+    5.  **Topics:** ${topics ? `Prioritize questions related to these topics: ${topics}.` : 'Cover a broad range of topics from the Body of Knowledge.'}
+    6.  **Format:** Return the output as a JSON array of question objects.
+
+    **Body of Knowledge:**
+    ---
+    ${bodyOfKnowledge}
+    ---
+
+    **Effectivity Sheet (Referenced Codes & Standards):**
+    ---
+    ${effectivitySheet}
+    ---
+    
+    Now, generate the ${numQuestions} questions.`;
+
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-pro',
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: questionSchema,
+          },
+          temperature: 0.8,
+        },
+      });
+      
+      const text = response.text?.trim();
+
+      if (!text) {
+        throw new Error("The AI model returned an empty response. This might be due to a content filter or temporary API issue. Please try again.");
+      }
+      
+      let questions: Question[];
+      try {
+        questions = JSON.parse(text);
+        if (!Array.isArray(questions)) {
+            throw new Error("Response was not in the expected array format.");
         }
-        
-        return generatedQuestions;
-    },
+      } catch (parseError) {
+        console.error("Failed to parse JSON from AI response:", text);
+        if (text.toLowerCase().includes("cannot fulfill") || text.toLowerCase().includes("i am unable")) {
+             throw new Error("The AI model was unable to generate questions for this topic, possibly due to a safety policy. Please try different topics or a more general quiz.");
+        }
+        throw new Error("The AI model returned a response that was not in the expected format. Please try generating the quiz again.");
+      }
+
+      if (questions.length === 0) {
+        return [];
+      }
+
+      // Data validation and cleanup
+      return questions.map(q => ({
+        ...q,
+        options: q.type === 'multiple-choice' ? q.options?.slice(0, 4) : undefined,
+      })).slice(0, numQuestions);
+
+    } catch (error) {
+      console.error("Error generating questions:", error);
+      
+      // Re-throw our custom, user-friendly errors from the parsing logic
+      if (error instanceof Error && error.message.startsWith("The AI model")) {
+          throw error; 
+      }
+
+      // Check for specific API error messages
+      if (error instanceof Error) {
+        const message = error.message.toLowerCase();
+        if (message.includes('api key not valid')) {
+          throw new Error("API Key Invalid: The configured API key is not valid. Please contact support to resolve this issue.");
+        }
+        if (message.includes('billing') || message.includes('quota')) {
+          throw new Error("Billing/Quota Issue: The API key has exceeded its quota or is not linked to an active billing account. Please contact support.");
+        }
+        if (message.includes('resource has been exhausted')) {
+           throw new Error("Service Overloaded: The AI model is currently experiencing high demand. Please try again in a few moments.");
+        }
+      }
+
+      // Generic fallback error
+      throw new Error("Failed to generate quiz questions. The AI model may be temporarily unavailable or the request may have timed out. Please try again later.");
+    }
+  }
+
+  async getFollowUpAnswer(question: Question, query: string): Promise<string> {
+    const prompt = `A user is studying for an exam and has a follow-up question about a practice problem.
+
+    **Original Question:**
+    ${question.question}
+    ${question.options ? `Options: ${question.options.join(', ')}` : ''}
     
-    generateFollowUp: async (question: Question, query: string): Promise<string> => {
-        if (!ai) throw new Error("AI Client not initialized.");
-        const prompt = `
-            Context: A user is studying for an inspection certification exam.
-            They just answered the following question:
-            Question: "${question.question}"
-            Correct Answer: "${question.answer}"
-            Explanation: "${question.explanation}"
-            Reference: "${question.reference}"
+    **Correct Answer:**
+    ${question.answer}
 
-            The user has a follow-up question: "${query}"
+    **Explanation Provided:**
+    ${question.explanation}
+    (Reference: ${question.reference})
 
-            Please provide a clear, concise, and helpful answer to their follow-up question, acting as a friendly and knowledgeable tutor.
-        `;
-        
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt
-        });
+    **User's Follow-up Query:**
+    "${query}"
 
-        return response.text;
-    },
+    Please provide a clear, concise, and helpful answer to the user's query, acting as a friendly and knowledgeable tutor. Base your answer on the context of the original question and its explanation.`;
 
-    saveQuizResult: async (userId: string, result: Omit<QuizResult, 'id' | 'userId'>): Promise<QuizResult> => {
-        const newResult: QuizResult = { ...result, id: `result_${Date.now()}`, userId };
-        const user = await api.updateUser(userId, { history: [...(await api.checkSession())!.history, newResult] });
-        return newResult;
-    },
-    
-    saveInProgressQuiz: async (userId: string, progress: InProgressQuizState): Promise<User> => {
-        return await api.updateUser(userId, { inProgressQuiz: progress });
-    },
-    
-    clearInProgressQuiz: async (userId: string): Promise<User> => {
-        return await api.updateUser(userId, { inProgressQuiz: null });
-    },
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+      });
+      return response.text;
+    } catch (error) {
+      console.error("Error getting follow-up answer:", error);
+      throw new Error("Failed to get an answer. The AI model may be temporarily unavailable.");
+    }
+  }
+}
 
-    // --- Activity Feed ---
-    
-    logActivity: async (userId: string, type: ActivityEventType, message: string): Promise<void> => {
-        const users = await api.getAllUsers();
-        const user = users.find(u => u.id === userId);
-        if (!user) return;
-
-        let feed: ActivityEvent[] = JSON.parse(localStorage.getItem(DB_ACTIVITY_KEY) || '[]');
-        const event: ActivityEvent = {
-            id: `event_${Date.now()}`,
-            userId,
-            userEmail: user.email,
-            type,
-            message,
-            timestamp: Date.now()
-        };
-        feed.unshift(event); // Add to the top
-        if (feed.length > 100) feed.pop(); // Keep feed size manageable
-        localStorage.setItem(DB_ACTIVITY_KEY, JSON.stringify(feed));
-    },
-
-    fetchActivityFeed: async (): Promise<ActivityEvent[]> => {
-        return JSON.parse(localStorage.getItem(DB_ACTIVITY_KEY) || '[]');
-    },
-
-    fetchUserActivity: async(userId: string): Promise<ActivityEvent[]> => {
-        const feed: ActivityEvent[] = JSON.parse(localStorage.getItem(DB_ACTIVITY_KEY) || '[]');
-        return feed.filter(event => event.userId === userId);
-    },
-
-    // --- Content Management (Exams) ---
-    getExams: async (): Promise<Exam[]> => {
-        return JSON.parse(localStorage.getItem(DB_EXAMS_KEY) || '[]');
-    },
-    addExam: async (exam: Omit<Exam, 'id'>): Promise<Exam> => {
-        const exams = await api.getExams();
-        const newExam: Exam = { ...exam, id: `exam_${Date.now()}` };
-        exams.push(newExam);
-        localStorage.setItem(DB_EXAMS_KEY, JSON.stringify(exams));
-        return newExam;
-    },
-    updateExam: async (examId: string, updatedData: Partial<Exam>): Promise<Exam> => {
-        let exams = await api.getExams();
-        let examToUpdate: Exam | undefined;
-        exams = exams.map(e => {
-            if (e.id === examId) {
-                examToUpdate = { ...e, ...updatedData };
-                return examToUpdate;
-            }
-            return e;
-        });
-        if (!examToUpdate) throw new Error('Exam not found');
-        localStorage.setItem(DB_EXAMS_KEY, JSON.stringify(exams));
-        return examToUpdate;
-    },
-    deleteExam: async (examId: string): Promise<void> => {
-        let exams = await api.getExams();
-        exams = exams.filter(e => e.id !== examId);
-        localStorage.setItem(DB_EXAMS_KEY, JSON.stringify(exams));
-    },
-    getExamBodyOfKnowledge: (examName: string): string => {
-        return examSourceData[examName]?.bodyOfKnowledge || "No specific knowledge areas defined for this exam.";
-    },
-
-    // --- Content Management (Announcements) ---
-    getAnnouncements: async (): Promise<Announcement[]> => {
-        return JSON.parse(localStorage.getItem(DB_ANNOUNCEMENTS_KEY) || '[]');
-    },
-    addAnnouncement: async (ann: Omit<Announcement, 'id'|'createdAt'>): Promise<Announcement> => {
-        const announcements = await api.getAnnouncements();
-        const newAnn: Announcement = { ...ann, id: `ann_${Date.now()}`, createdAt: Date.now() };
-        announcements.push(newAnn);
-        localStorage.setItem(DB_ANNOUNCEMENTS_KEY, JSON.stringify(announcements));
-        return newAnn;
-    },
-    updateAnnouncement: async (id: string, updatedData: Partial<Announcement>): Promise<Announcement> => {
-        let announcements = await api.getAnnouncements();
-        let announcementToUpdate: Announcement | undefined;
-        announcements = announcements.map(ann => {
-            if (ann.id === id) {
-                announcementToUpdate = { ...ann, ...updatedData };
-                return announcementToUpdate;
-            }
-            return ann;
-        });
-        if (!announcementToUpdate) throw new Error('Announcement not found');
-        localStorage.setItem(DB_ANNOUNCEMENTS_KEY, JSON.stringify(announcements));
-        return announcementToUpdate;
-    },
-    deleteAnnouncement: async (id: string): Promise<void> => {
-        let announcements = await api.getAnnouncements();
-        announcements = announcements.filter(ann => ann.id !== id);
-        localStorage.setItem(DB_ANNOUNCEMENTS_KEY, JSON.stringify(announcements));
-    },
-};
-
-api.initialize();
-
+const api = new ApiService();
 export default api;

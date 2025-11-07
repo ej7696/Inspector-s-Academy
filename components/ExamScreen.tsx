@@ -15,13 +15,14 @@ interface Props {
   onToggleStrikethrough: (option: string) => void;
   onSubmit: () => void;
   onSaveAndExit: (time: number) => void;
+  onAutoSave: (answers: InProgressAnswer[], time: number) => void;
   onAskFollowUp: (question: Question, query: string) => void;
   followUpAnswer: string;
   isFollowUpLoading: boolean;
 }
 
 const ExamScreen: React.FC<Props> = ({
-  user, questions, quizSettings, currentIndex, answers, onSelectAnswer, onNavigate, onToggleFlag, onToggleStrikethrough, onSubmit, onSaveAndExit,
+  user, questions, quizSettings, currentIndex, answers, onSelectAnswer, onNavigate, onToggleFlag, onToggleStrikethrough, onSubmit, onSaveAndExit, onAutoSave,
   onAskFollowUp, followUpAnswer, isFollowUpLoading
 }) => {
   const [isNavigatorVisible, setIsNavigatorVisible] = useState(false);
@@ -29,6 +30,9 @@ const ExamScreen: React.FC<Props> = ({
   const [timeLeft, setTimeLeft] = useState(quizSettings.numQuestions * 90); // 1.5 mins per question
   const [showExplanation, setShowExplanation] = useState(false);
   const [followUpQuery, setFollowUpQuery] = useState('');
+  
+  // FIX: Replace NodeJS.Timeout with number for browser compatibility.
+  const autoSaveTimeout = useRef<number | null>(null);
 
   const currentQuestion = questions[currentIndex];
   const currentAnswer = answers[currentIndex];
@@ -70,6 +74,23 @@ const ExamScreen: React.FC<Props> = ({
     }, 1000);
     return () => clearInterval(timer);
   }, [quizSettings.isTimed, onSubmit]);
+  
+  // Auto-save logic
+  useEffect(() => {
+    // Debounce the save operation
+    if (autoSaveTimeout.current) {
+        clearTimeout(autoSaveTimeout.current);
+    }
+    autoSaveTimeout.current = setTimeout(() => {
+        onAutoSave(answers, timeLeft);
+    }, 5000); // Save every 5 seconds after the last change
+
+    return () => {
+        if (autoSaveTimeout.current) {
+            clearTimeout(autoSaveTimeout.current);
+        }
+    };
+  }, [answers, timeLeft, onAutoSave]);
 
   const formatTime = (seconds: number) => {
     const h = Math.floor(seconds / 3600).toString().padStart(2, '0');

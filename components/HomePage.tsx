@@ -182,10 +182,17 @@ const HomePage: React.FC<Props> = ({
         <div className="space-y-6">
             <div className="bg-white p-6 rounded-lg shadow-md">
                 <h2 className="text-xl font-bold text-gray-800 mb-4">Quiz Settings</h2>
+                 {user.subscriptionTier === 'STARTER' && (
+                    <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+                        <p><b>Starter Plan Limits:</b></p>
+                        <p>Questions remaining this month: <b>{user.monthlyQuestionRemaining ?? 15} / 15</b></p>
+                        {selectedExam && <p>Questions used for "{selectedExam.name}": <b>{user.monthlyExamUsage?.[selectedExam.name] || 0} / 2</b></p>}
+                    </div>
+                )}
                 <div className="space-y-5">
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Number of Questions: {numQuestions}</label>
-                        <input type="range" min="5" max="120" step="5" value={numQuestions} onChange={e => setNumQuestions(Number(e.target.value))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" disabled={!selectedExam}/>
+                        <input type="range" min="1" max="120" step="1" value={numQuestions} onChange={e => setNumQuestions(Number(e.target.value))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" disabled={!selectedExam}/>
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Focus on Specific Topics (Optional)</label>

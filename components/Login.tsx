@@ -81,7 +81,7 @@ const Login: React.FC<Props> = ({ onLoginSuccess }) => {
                     <div className="flex flex-col sm:flex-row gap-2 justify-center">
                         <button onClick={() => handleDemoLogin('admin@test.com', 'admin123')} className="flex-1 text-xs text-center py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition font-medium" style={{ fontFamily: 'Poppins, sans-serif' }}>Log in as Admin</button>
                         <button onClick={() => handleDemoLogin('subadmin@test.com', 'subadmin123')} className="flex-1 text-xs text-center py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition font-medium" style={{ fontFamily: 'Poppins, sans-serif' }}>Log in as Subadmin</button>
-                        <button onClick={() => handleDemoLogin('cadet@test.com', 'user123')} className="flex-1 text-xs text-center py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition font-medium" style={{ fontFamily: 'Poppins, sans-serif' }}>Log in as User</button>
+                        <button onClick={() => handleDemoLogin('cadet@test.com', 'password123')} className="flex-1 text-xs text-center py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition font-medium" style={{ fontFamily: 'Poppins, sans-serif' }}>Log in as User</button>
                     </div>
                 </div>
             </div>

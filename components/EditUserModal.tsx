@@ -21,7 +21,8 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
   useEffect(() => {
     if (isOpen) {
       setFormData(user);
-      api.getExams().then(setAllExams);
+      // Fix: api.getExams() is synchronous and does not return a promise.
+      setAllExams(api.getExams());
       setError('');
       setActionMessage('');
     }
@@ -98,6 +99,7 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
 
   const canEditRole = currentUser.role === 'ADMIN' && currentUser.id !== user.id && user.role !== 'ADMIN';
   const canPerformActionsOnUser = currentUser.id !== user.id && (currentUser.role === 'ADMIN' || (currentUser.role === 'SUB_ADMIN' && user.role === 'USER'));
+  const canManageSubs = currentUser.role === 'ADMIN' || !!currentUser.permissions?.canManageSubscriptions;
 
 
   if (!isOpen) return null;
@@ -127,7 +129,13 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label className="block text-sm font-medium text-gray-700">Subscription Tier</label>
-                    <select name="subscriptionTier" value={formData.subscriptionTier || 'STARTER'} onChange={handleChange} className="w-full mt-1 p-2 border border-gray-300 rounded-md">
+                    <select 
+                        name="subscriptionTier" 
+                        value={formData.subscriptionTier || 'STARTER'} 
+                        onChange={handleChange} 
+                        className="w-full mt-1 p-2 border border-gray-300 rounded-md disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        disabled={!canManageSubs}
+                    >
                         <option value="STARTER">Starter</option>
                         <option value="PROFESSIONAL">Professional</option>
                         <option value="SPECIALIST">Specialist</option>
@@ -164,22 +172,24 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
 
             {/* Manual Exam Unlocks */}
             {formData.subscriptionTier !== 'STARTER' && (
-                <div>
-                    <label className="block text-sm font-bold text-gray-700">Manual Exam Unlocks</label>
+                <fieldset disabled={!canManageSubs}>
+                    <label className={`block text-sm font-bold ${!canManageSubs ? 'text-gray-400' : 'text-gray-700'}`}>Manual Exam Unlocks</label>
                     <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-2">
                         {allExams.map(exam => (
-                            <label key={exam.id} className="flex items-center p-2 bg-gray-50 border rounded-md">
+                            <label key={exam.id} className={`flex items-center p-2 bg-gray-50 border rounded-md ${!canManageSubs ? 'cursor-not-allowed' : ''}`}>
                                 <input
                                     type="checkbox"
                                     checked={(formData.unlockedExams || []).includes(exam.name)}
                                     onChange={() => handleExamToggle(exam.name)}
-                                    className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                                    className="h-4 w-4 text-blue-600 border-gray-300 rounded disabled:cursor-not-allowed"
+                                    disabled={!canManageSubs}
                                 />
-                                <span className="ml-2 text-sm text-gray-700">{exam.name}</span>
+                                <span className={`ml-2 text-sm ${!canManageSubs ? 'text-gray-400' : 'text-gray-700'}`}>{exam.name}</span>
                             </label>
                         ))}
                     </div>
-                </div>
+                    {!canManageSubs && <p className="text-xs text-gray-500 mt-1">You do not have permission to manage subscriptions.</p>}
+                </fieldset>
             )}
             
             {/* Quick Actions */}

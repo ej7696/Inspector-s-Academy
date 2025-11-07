@@ -4,7 +4,8 @@ import { User, Role } from '../types';
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  onAddUser: (newUser: Omit<User, 'id' | 'subscriptionTier' | 'unlockedExams' | 'history' | 'inProgressQuiz' | 'createdAt' | 'lastActive'>) => Promise<void>;
+  // Fix: Correct the Omit type to not expect fields that are auto-generated or not set in this form.
+  onAddUser: (newUser: Omit<User, 'id' | 'subscriptionTier' | 'unlockedExams' | 'history' | 'inProgressQuiz' | 'createdAt' | 'lastActive' | 'monthlyQuestionRemaining' | 'monthlyExamUsage' | 'monthlyResetDate' | 'permissions' | 'subscriptionExpiresAt' | 'isSuspended'>) => Promise<void>;
 }
 
 const AddUserModal: React.FC<Props> = ({ isOpen, onClose, onAddUser }) => {

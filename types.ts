@@ -39,17 +39,6 @@ export interface InProgressAnswer {
   strikethroughOptions: string[];
 }
 
-export interface QuizResult {
-  id: string;
-  userId: string;
-  examName: string;
-  score: number;
-  totalQuestions: number;
-  percentage: number;
-  date: number; // timestamp
-  userAnswers: UserAnswer[];
-}
-
 export interface InProgressQuizState {
   questions: Question[];
   answers: InProgressAnswer[];
@@ -80,7 +69,7 @@ export interface User {
   phoneNumber?: string;
   password?: string; // Should be handled securely on a real backend
   subscriptionTier: SubscriptionTier;
-  subscriptionExpiresAt?: number;
+  subscriptionExpiresAt?: number | null;
   unlockedExams: string[];
   history: QuizResult[];
   inProgressQuiz?: InProgressQuizState | null;
@@ -90,9 +79,20 @@ export interface User {
   lastActive: number;
   isSuspended?: boolean;
   // Fields for Monthly Question Bank for STARTER users
-  monthlyQuestionRemaining?: number | null;
-  monthlyExamUsage?: { [examName: string]: number } | null;
-  monthlyResetDate?: number | null;
+  monthlyQuestionRemaining: number | null;
+  monthlyExamUsage: { [examName: string]: number } | null;
+  monthlyResetDate: number | null;
+}
+
+export interface QuizResult {
+  id: string;
+  userId: string;
+  examName: string;
+  score: number;
+  totalQuestions: number;
+  percentage: number;
+  date: number; // timestamp
+  userAnswers: UserAnswer[];
 }
 
 export type ActivityEventType = 'login' | 'upgrade' | 'unlock' | 'one_time_unlock' | 'quiz_complete';
