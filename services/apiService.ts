@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { User, Question, ActivityEvent, Exam, Announcement, SubscriptionTierDetails, Role, QuizResult, InProgressQuizState, InProgressAnswer, UserAnswer } from '../types';
+import { User, Question, ActivityEvent, Exam, Announcement, SubscriptionTierDetails, Role, QuizResult, InProgressQuizState, InProgressAnswer, UserAnswer, SubscriptionTier } from '../types';
 import { seedData } from './seedData';
 import { examSourceData } from './examData';
 
@@ -138,7 +138,7 @@ class ApiService {
     return userToUpdate;
   }
 
-  addUser(newUser: Omit<User, 'id' | 'subscriptionTier' | 'unlockedExams' | 'history' | 'inProgressQuiz' | 'createdAt' | 'lastActive' | 'monthlyQuestionRemaining' | 'monthlyExamUsage' | 'monthlyResetDate' | 'permissions' | 'subscriptionExpiresAt' | 'isSuspended'>): User {
+  addUser(newUser: Omit<User, 'id' | 'subscriptionTier' | 'unlockedExams' | 'history' | 'inProgressQuiz' | 'createdAt' | 'lastActive' | 'monthlyQuestionRemaining' | 'monthlyExamUsage' | 'monthlyResetDate' | 'permissions' | 'subscriptionExpiresAt' | 'isSuspended' | 'paidUnlockSlots'>): User {
     const users = this.getAllUsers();
     if (users.some(u => u.email.toLowerCase() === newUser.email.toLowerCase())) {
         throw new Error('A user with this email already exists.');
@@ -148,6 +148,8 @@ class ApiService {
       id: `user-${Date.now()}`,
       ...newUser,
       subscriptionTier: 'STARTER',
+      paidUnlockSlots: 0,
+      subscriptionExpiresAt: null,
       unlockedExams: [],
       history: [],
       createdAt: now,
@@ -247,6 +249,28 @@ class ApiService {
   // --- Subscriptions ---
   getSubscriptionTiers(): SubscriptionTierDetails[] {
      return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.SUBSCRIPTION_TIERS) || '[]');
+  }
+  
+  upgradeSubscription(userId: string, tier: SubscriptionTier, slots: number): User {
+    const FOUR_MONTHS_IN_MS = 4 * 30 * 24 * 60 * 60 * 1000;
+    const updates = {
+      subscriptionTier: tier,
+      paidUnlockSlots: slots,
+      subscriptionExpiresAt: Date.now() + FOUR_MONTHS_IN_MS,
+      unlockedExams: [], // CRITICAL: Reset unlocks on upgrade/renewal
+    };
+    const user = this.updateUser(userId, updates);
+    this.logActivity('upgrade', `upgraded/renewed to ${tier} plan.`, userId, user.email);
+    return user;
+  }
+
+  purchaseAdditionalUnlock(userId: string): User {
+    const currentUser = this.getAllUsers().find(u => u.id === userId);
+    if (!currentUser) throw new Error("User not found for purchase");
+
+    const updatedUser = this.updateUser(userId, { paidUnlockSlots: currentUser.paidUnlockSlots + 1 });
+    this.logActivity('one_time_unlock', 'purchased an additional exam slot.', userId, updatedUser.email);
+    return updatedUser;
   }
 
   // --- Activity ---

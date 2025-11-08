@@ -13,10 +13,11 @@ interface Props {
   onUpgrade: () => void;
   onResumeQuiz: (progress: InProgressQuizState) => void;
   onAbandonQuiz: () => void;
+  onInitiateUnlockPurchase: (examName: string, price: string) => void;
 }
 
 const HomePage: React.FC<Props> = ({ 
-  user, onStartQuiz, onViewDashboard, onViewProfile, onViewAdmin, onLogout, onUpgrade, onResumeQuiz, onAbandonQuiz 
+  user, onStartQuiz, onViewDashboard, onViewProfile, onViewAdmin, onLogout, onUpgrade, onResumeQuiz, onAbandonQuiz, onInitiateUnlockPurchase
 }) => {
   const [exams, setExams] = useState<Exam[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -79,6 +80,8 @@ const HomePage: React.FC<Props> = ({
       if (relevantHistory.length === 0) return 0;
       return Math.max(...relevantHistory.map(h => h.percentage));
   };
+
+  const isSubscriptionActive = user.subscriptionTier !== 'STARTER' && user.subscriptionExpiresAt ? Date.now() < user.subscriptionExpiresAt : false;
 
 
   if (isLoading) {
@@ -147,14 +150,15 @@ const HomePage: React.FC<Props> = ({
                 const isUnlocked = user.unlockedExams.includes(exam.name);
                 const isSelected = selectedExam?.id === exam.id;
                 const mastery = getMasteryScore(exam.name);
+                const canUnlockMore = user.paidUnlockSlots > user.unlockedExams.length;
 
                 return (
                   <li
                     key={exam.id}
                     onClick={() => setSelectedExam(exam)}
-                    className={`p-4 flex items-center justify-between rounded-lg border-2 cursor-pointer transition-all ${
-                      isSelected ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-gray-200 bg-white hover:bg-gray-50'
-                    }`}
+                    className={`p-4 flex items-center justify-between rounded-lg border-2 transition-all ${
+                      isSelected ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-gray-200 bg-white'
+                    } ${!isSelected && (isUnlocked || user.subscriptionTier === 'STARTER') ? 'hover:bg-gray-50 cursor-pointer' : ''}`}
                   >
                     <div>
                         <p className="font-semibold text-lg text-gray-800">{exam.name}</p>
@@ -166,11 +170,24 @@ const HomePage: React.FC<Props> = ({
                             <ProgressRing score={mastery} />
                             <span>Unlocked</span>
                          </div>
-                       ) : (
+                       ) : canUnlockMore ? (
                          <div className="text-sm text-gray-500 font-medium flex items-center gap-1">
                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" /></svg>
                            <span>Locked</span>
                          </div>
+                       ) : (
+                         <button 
+                           onClick={(e) => {
+                             e.stopPropagation(); // Prevent li onClick from firing
+                             onInitiateUnlockPurchase(exam.name, '$250');
+                           }}
+                           disabled={!isSubscriptionActive}
+                           className={`text-sm font-bold px-3 py-1 rounded-full transition-colors ${
+                               !isSubscriptionActive ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-green-500 text-white hover:bg-green-600'
+                           }`}
+                         >
+                           {isSubscriptionActive ? 'Unlock for $250' : 'Renew to Unlock'}
+                         </button>
                        )
                     )}
                   </li>
@@ -219,7 +236,11 @@ const HomePage: React.FC<Props> = ({
                     {(user.role === 'ADMIN' || user.role === 'SUB_ADMIN') && (
                         <button onClick={onViewAdmin} className="w-full text-left py-2 px-3 bg-yellow-100 hover:bg-yellow-200 text-yellow-800 rounded-md transition font-medium">Admin Panel</button>
                     )}
-                    <button onClick={onUpgrade} className="w-full text-left py-2 px-3 bg-green-100 hover:bg-green-200 text-green-800 rounded-md transition font-medium">Upgrade Plan</button>
+                    {user.subscriptionTier === 'STARTER' ? (
+                      <button onClick={onUpgrade} className="w-full text-left py-2 px-3 bg-green-100 hover:bg-green-200 text-green-800 rounded-md transition font-medium">Upgrade Plan</button>
+                    ) : !isSubscriptionActive && (
+                      <button onClick={onUpgrade} className="w-full text-left py-2 px-3 bg-yellow-100 hover:bg-yellow-200 text-yellow-800 rounded-md transition font-medium">Renew Subscription</button>
+                    )}
                 </div>
             </div>
         </div>

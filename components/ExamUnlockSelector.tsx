@@ -1,20 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { User, SubscriptionTier, Exam } from '../types';
+import { User, Exam } from '../types';
 import api from '../services/apiService';
 
 interface Props {
   user: User;
-  tier: SubscriptionTier;
   onConfirmUnlock: (selectedExamNames: string[]) => void;
   onCancel: () => void;
 }
 
-const ExamUnlockSelector: React.FC<Props> = ({ user, tier, onConfirmUnlock, onCancel }) => {
+const ExamUnlockSelector: React.FC<Props> = ({ user, onConfirmUnlock, onCancel }) => {
   const [allExams, setAllExams] = useState<Exam[]>([]);
   const [selectedExams, setSelectedExams] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const unlockLimit = tier === 'PROFESSIONAL' ? 1 : tier === 'SPECIALIST' ? 2 : 0;
+  const unlockLimit = user.paidUnlockSlots - user.unlockedExams.length;
+  const tierName = user.subscriptionTier.charAt(0) + user.subscriptionTier.slice(1).toLowerCase();
 
   useEffect(() => {
     const fetchExams = async () => {
@@ -60,7 +60,7 @@ const ExamUnlockSelector: React.FC<Props> = ({ user, tier, onConfirmUnlock, onCa
       <>
         <h1 className="text-2xl font-bold text-gray-800 mb-2">Unlock Your Exam Access</h1>
         <p className="text-gray-600 mb-4">
-          Congratulations on upgrading to the {tier} plan! Please select {unlockLimit} exam(s) to unlock.
+          Welcome to the {tierName} plan! Please select {unlockLimit} exam(s) to unlock.
         </p>
 
         <div className="flex-grow border-t border-b py-4 my-4 overflow-y-auto space-y-3 pr-2">

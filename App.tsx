@@ -38,8 +38,8 @@ const App: React.FC = () => {
   const [startTime, setStartTime] = useState(0);
   const [timeRemaining, setTimeRemaining] = useState(0);
   
-  // Upgrade Flow State
-  const [targetUpgradeTier, setTargetUpgradeTier] = useState<SubscriptionTier | null>(null);
+  // Purchase Flow State
+  const [examToPurchase, setExamToPurchase] = useState<{name: string, price: string} | null>(null);
 
   const [followUpAnswer, setFollowUpAnswer] = useState('');
   const [isFollowUpLoading, setIsFollowUpLoading] = useState(false);
@@ -67,7 +67,7 @@ const App: React.FC = () => {
     setTimeRemaining(0);
     setFollowUpAnswer('');
     setIsFollowUpLoading(false);
-    setTargetUpgradeTier(null);
+    setExamToPurchase(null);
   };
 
   const handleLoginSuccess = (user: User) => {
@@ -95,12 +95,21 @@ const App: React.FC = () => {
   const handleStartQuiz = (examName: string, numQuestions: number, isTimed: boolean, topics?: string) => {
     // Enforce lock status for paid tiers
     if (currentUser && (currentUser.subscriptionTier === 'PROFESSIONAL' || currentUser.subscriptionTier === 'SPECIALIST')) {
+      // Check 1: Is subscription active?
+      if (!currentUser.subscriptionExpiresAt || Date.now() > currentUser.subscriptionExpiresAt) {
+        setErrorInfo({
+          title: 'Subscription Expired',
+          message: 'Your subscription has expired. Please renew your plan to continue practicing.'
+        });
+        return;
+      }
+      // Check 2: Is the exam unlocked?
       if (!currentUser.unlockedExams.includes(examName)) {
         setErrorInfo({
           title: 'Exam Locked',
-          message: `This exam is not unlocked on your current plan. Please select an unlocked exam or manage your subscription from your profile.`
+          message: `This exam is not unlocked on your current plan. Please select an unlocked exam.`
         });
-        return; // Stop the process here
+        return;
       }
     }
 
@@ -392,32 +401,44 @@ const App: React.FC = () => {
     setCurrentView('home');
   };
   
+  // For STARTER users upgrading for the first time or expired users renewing
   const handleUpgrade = (tier: SubscriptionTier) => {
     if (!currentUser) return;
-    if (tier === 'STARTER') {
-      setCurrentView('home');
-      return;
-    }
-    setTargetUpgradeTier(tier);
+    const slots = tier === 'PROFESSIONAL' ? 1 : tier === 'SPECIALIST' ? 2 : 0;
+    if (slots === 0) return;
+    
+    const updatedUser = api.upgradeSubscription(currentUser.id, tier, slots);
+    setCurrentUser(updatedUser);
     setCurrentView('select_unlocked_exams');
   };
 
+  // For paid users buying an additional slot
+  const handleInitiateUnlockPurchase = (examName: string, price: string) => {
+    setExamToPurchase({ name: examName, price });
+  };
+  
+  const handleConfirmUnlockPurchase = () => {
+    if (!currentUser) return;
+    const updatedUser = api.purchaseAdditionalUnlock(currentUser.id);
+    setCurrentUser(updatedUser);
+    setExamToPurchase(null);
+    setCurrentView('select_unlocked_exams');
+  };
+
+  // Called from ExamUnlockSelector after user makes their choice
   const handleConfirmUnlock = (selectedExamNames: string[]) => {
-    if (!currentUser || !targetUpgradeTier) return;
+    if (!currentUser) return;
     
     const currentUnlocked = currentUser.unlockedExams || [];
     const newUnlocked = [...new Set([...currentUnlocked, ...selectedExamNames])];
     
     const updatedUser = api.updateUser(currentUser.id, {
-      subscriptionTier: targetUpgradeTier,
       unlockedExams: newUnlocked,
     });
     
     setCurrentUser(updatedUser);
-    setTargetUpgradeTier(null);
     setCurrentView('home');
   };
-
 
   const renderContent = () => {
     if (isLoading) {
@@ -440,6 +461,7 @@ const App: React.FC = () => {
           onUpgrade={() => setCurrentView('paywall')}
           onResumeQuiz={handleResumeQuiz}
           onAbandonQuiz={handleAbandonQuiz}
+          onInitiateUnlockPurchase={handleInitiateUnlockPurchase}
         />;
       case 'select_mode':
         return <ExamModeSelector 
@@ -525,9 +547,8 @@ const App: React.FC = () => {
       case 'select_unlocked_exams':
         return <ExamUnlockSelector
           user={currentUser}
-          tier={targetUpgradeTier!}
           onConfirmUnlock={handleConfirmUnlock}
-          onCancel={() => { setTargetUpgradeTier(null); setCurrentView('home'); }}
+          onCancel={() => setCurrentView('home')}
         />;
       default:
         return <HomePage 
@@ -540,6 +561,7 @@ const App: React.FC = () => {
           onUpgrade={() => setCurrentView('paywall')}
           onResumeQuiz={handleResumeQuiz}
           onAbandonQuiz={handleAbandonQuiz}
+          onInitiateUnlockPurchase={handleInitiateUnlockPurchase}
         />;
     }
   };
@@ -566,6 +588,17 @@ const App: React.FC = () => {
               setCurrentView('home');
             }
           }]}
+        />
+      )}
+      {examToPurchase && currentUser && (
+         <InfoDialog
+          open={true}
+          title="Confirm Purchase"
+          message={`You are about to purchase access to the "${examToPurchase.name}" certification track for ${examToPurchase.price}. This access will be valid until your current subscription expires on ${currentUser.subscriptionExpiresAt ? new Date(currentUser.subscriptionExpiresAt).toLocaleDateString() : 'your renewal date'}.`}
+          buttons={[
+            { text: 'Cancel', style: 'neutral', onClick: () => setExamToPurchase(null) },
+            { text: 'Confirm Purchase', style: 'primary', onClick: handleConfirmUnlockPurchase },
+          ]}
         />
       )}
       {renderContent()}

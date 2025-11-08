@@ -69,6 +69,7 @@ export interface User {
   phoneNumber?: string;
   password?: string; // Should be handled securely on a real backend
   subscriptionTier: SubscriptionTier;
+  paidUnlockSlots: number; // New field for à la carte model
   subscriptionExpiresAt?: number | null;
   unlockedExams: string[];
   history: QuizResult[];

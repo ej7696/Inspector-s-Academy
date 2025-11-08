@@ -5,6 +5,7 @@ import { User, Announcement, SubscriptionTierDetails, Role } from '../types';
 
 const now = Date.now();
 const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
+const FOUR_MONTHS_IN_MS = 4 * THIRTY_DAYS_IN_MS;
 
 export const seedData = {
   users: [
@@ -14,6 +15,8 @@ export const seedData = {
       email: 'admin@test.com',
       password: 'admin123',
       subscriptionTier: 'SPECIALIST',
+      paidUnlockSlots: 2,
+      subscriptionExpiresAt: now + FOUR_MONTHS_IN_MS,
       unlockedExams: [],
       history: [],
       role: 'ADMIN',
@@ -29,6 +32,8 @@ export const seedData = {
       email: 'subadmin@test.com',
       password: 'subadmin123',
       subscriptionTier: 'SPECIALIST',
+      paidUnlockSlots: 2,
+      subscriptionExpiresAt: now + FOUR_MONTHS_IN_MS,
       unlockedExams: [],
       history: [],
       role: 'SUB_ADMIN',
@@ -49,6 +54,8 @@ export const seedData = {
       email: 'cadet@test.com',
       password: 'password123',
       subscriptionTier: 'STARTER',
+      paidUnlockSlots: 0,
+      subscriptionExpiresAt: null,
       unlockedExams: [],
       history: [],
       role: 'USER',
@@ -64,6 +71,8 @@ export const seedData = {
       email: 'pro@test.com',
       password: 'password123',
       subscriptionTier: 'PROFESSIONAL',
+      paidUnlockSlots: 1,
+      subscriptionExpiresAt: now + FOUR_MONTHS_IN_MS,
       unlockedExams: [],
       history: [],
       role: 'USER',
@@ -79,6 +88,8 @@ export const seedData = {
       email: 'specialist@test.com',
       password: 'password123',
       subscriptionTier: 'SPECIALIST',
+      paidUnlockSlots: 2,
+      subscriptionExpiresAt: now + FOUR_MONTHS_IN_MS,
       unlockedExams: [],
       history: [],
       role: 'USER',
