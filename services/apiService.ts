@@ -319,15 +319,23 @@ class ApiService {
       required: ['question', 'type', 'answer', 'reference', 'explanation', 'category']
     };
 
-    const prompt = `You are an expert curriculum developer creating a practice exam for the "${examName}" certification. Your task is to generate ${numQuestions} challenging, exam-caliber questions based *exclusively* on the provided Body of Knowledge and Effectivity Sheet.
+    const prompt = `You are an expert API (American Petroleum Institute) exam author, creating a practice test for the "${examName}" certification. Your task is to generate ${numQuestions} exam-caliber questions based *exclusively* on the provided official documents.
 
-    **Key Instructions:**
-    1.  **Source Material:** Adhere strictly to the content within the Body of Knowledge and Effectivity Sheet. Do not introduce outside information.
-    2.  **Question Style:** Questions should be complex, requiring careful reading and application of the rules, not just simple recall.
-    3.  **Answer & Options:** For multiple-choice questions, provide four distinct options. One must be unambiguously correct, and the others should be plausible but incorrect distractors. For true/false, the answer must be 'True' or 'False'.
-    4.  **Reference & Explanation:** Every question MUST include a specific reference to the document and section (e.g., "API 510, 7.4.2" or "ASME Sec IX, QW-202.1") and a detailed explanation.
-    5.  **Topics:** ${topics ? `Prioritize questions related to these topics: ${topics}.` : 'Cover a broad range of topics from the Body of Knowledge.'}
-    6.  **Format:** Return the output as a JSON array of question objects.
+    **Key Instructions for Realism:**
+    1.  **Source Adherence:** Your primary goal is to base every question and its answer options strictly on the provided Body of Knowledge and Effectivity Sheet. Do not use outside knowledge.
+    2.  **CRITICAL RULE:** Never use the phrases 'Body of Knowledge' or 'Effectivity Sheet' in the text of the questions you generate. The questions must feel authentic, as if they are from a real exam, which would never refer to its own source syllabus documents.
+    3.  **Question Style:**
+        *   **Tone:** Use formal, direct, and unambiguous language.
+        *   **Format:** Prioritize direct recall questions (e.g., "What is...", "Which of the following...") and sentence-completion formats (e.g., "A relief valve begins to open when..."). Avoid long, narrative scenarios.
+        *   **Negative Phrasing:** Occasionally, use negative phrasing like "...all of the following are true EXCEPT:".
+    4.  **Answer & Distractors:**
+        *   For multiple-choice, create four options.
+        *   One option must be verifiably correct based on the source text.
+        *   The three incorrect "distractor" options must be plausible and use related terminology from the industry or source documents. They should test for precise knowledge.
+        *   Ensure all options have a similar length and parallel grammatical structure.
+    5.  **Reference & Explanation:** Every question MUST include a specific citation to the source document (e.g., "API 510, 7.4.2") and a detailed explanation for why the correct answer is correct.
+    6.  **Topic Focus:** ${topics ? `Prioritize questions related to these topics: ${topics}.` : 'Cover a broad range of topics from the Body of Knowledge.'}
+    7.  **Format:** Return the output as a JSON array of question objects.
 
     **Body of Knowledge:**
     ---
@@ -339,7 +347,7 @@ class ApiService {
     ${effectivitySheet}
     ---
     
-    Now, generate the ${numQuestions} questions.`;
+    Now, generate the ${numQuestions} questions, perfectly matching the style of a real API certification exam.`;
 
     try {
       const response = await ai.models.generateContent({

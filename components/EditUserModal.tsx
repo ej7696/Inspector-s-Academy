@@ -17,16 +17,22 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [actionMessage, setActionMessage] = useState('');
+  const [resetStatus, setResetStatus] = useState<'idle' | 'sending' | 'sent'>('idle');
+
 
   useEffect(() => {
+    // CRITICAL FIX: Depend on user.id.
+    // This ensures the form only re-initializes when a NEW user is selected for editing.
+    // It prevents the parent's re-renders (after an update) from overwriting this modal's
+    // internal state, which preserves the feedback messages (e.g., "User suspended").
     if (isOpen) {
       setFormData(user);
-      // Fix: api.getExams() is synchronous and does not return a promise.
       setAllExams(api.getExams());
       setError('');
       setActionMessage('');
+      setResetStatus('idle');
     }
-  }, [isOpen, user]);
+  }, [user.id, isOpen]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -56,13 +62,13 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
     setFormData(prev => ({ ...prev, unlockedExams: newUnlockedExams }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
     setActionMessage('');
     try {
-      const updatedUser = await api.updateUser(user.id, formData);
+      const updatedUser = api.updateUser(user.id, formData);
       onUpdateUser(updatedUser);
       onClose();
     } catch (err: any) {
@@ -72,29 +78,64 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
     }
   };
   
-  const handlePasswordReset = async () => {
-      if(window.confirm(`Are you sure you want to send a password reset to ${user.email}?`)) {
-          try {
-            await api.sendPasswordReset(user.email);
-            setActionMessage('Password reset email sent successfully.');
-          } catch(err: any) {
-            setError(err.message || 'Failed to send reset email.');
-          }
-      }
+  const handlePasswordReset = () => {
+    setError('');
+    if (resetStatus !== 'idle') return;
+
+    if (window.confirm(`Are you sure you want to send a password reset to ${user.email}?`)) {
+      setResetStatus('sending');
+      api.sendPasswordReset(user.email)
+        .then(() => {
+          setResetStatus('sent');
+          setTimeout(() => {
+            setResetStatus('idle'); // Reset after 3 seconds
+          }, 3000);
+        })
+        .catch((err: any) => {
+          setError(err.message || 'Failed to send reset email.');
+          setResetStatus('idle');
+        });
+    }
   };
 
-  const handleToggleSuspend = async () => {
-      const action = user.isSuspended ? 'unsuspend' : 'suspend';
-      if(window.confirm(`Are you sure you want to ${action} this user?`)) {
-          try {
-            const updatedUser = await api.updateUser(user.id, { isSuspended: !user.isSuspended });
-            onUpdateUser(updatedUser);
-            setActionMessage(`User has been ${action}ed.`);
-            onClose(); // Close modal after action
-          } catch (err: any) {
-            setError(err.message || `Failed to ${action} user.`);
-          }
+  const handleToggleSuspend = () => {
+    setError('');
+    setActionMessage('');
+    const isCurrentlySuspended = formData.isSuspended || false;
+    const action = isCurrentlySuspended ? 'unsuspend' : 'suspend';
+    
+    if (window.confirm(`Are you sure you want to ${action} this user?`)) {
+      try {
+        const newSuspendedState = !isCurrentlySuspended;
+        // 1. Update data source
+        const updatedUser = api.updateUser(user.id, { isSuspended: newSuspendedState });
+        
+        // 2. Update parent state for optimistic UI
+        onUpdateUser(updatedUser);
+
+        // 3. Update local state for immediate feedback within the modal
+        setFormData(updatedUser);
+        
+        setActionMessage(`User has been successfully ${newSuspendedState ? 'suspended' : 'unsuspended'}.`);
+        
+        setTimeout(() => {
+          setActionMessage('');
+        }, 3000);
+
+      } catch (err: any)
+      {
+        setError(err.message || `Failed to ${action} user.`);
       }
+    }
+  };
+  
+  const getPasswordResetButtonText = () => {
+    switch(resetStatus) {
+      case 'sending': return 'Sending...';
+      case 'sent': return 'Sent!';
+      case 'idle':
+      default: return 'Send Password Reset';
+    }
   };
 
   const canEditRole = currentUser.role === 'ADMIN' && currentUser.id !== user.id && user.role !== 'ADMIN';
@@ -198,11 +239,20 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
                     <label className="block text-sm font-bold text-gray-700">Quick Actions</label>
                     <div className="mt-2 flex flex-wrap gap-2">
                          {(currentUser.role === 'ADMIN' || currentUser.permissions?.canSendPasswordResets) && (
-                            <button type="button" onClick={handlePasswordReset} className="text-sm bg-yellow-100 text-yellow-800 hover:bg-yellow-200 px-3 py-1 rounded-md">Send Password Reset</button>
+                            <button 
+                                type="button" 
+                                onClick={handlePasswordReset} 
+                                disabled={resetStatus !== 'idle'}
+                                className={`text-sm px-3 py-1 rounded-md transition-colors ${
+                                    resetStatus === 'sent' ? 'bg-green-500 text-white' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200 disabled:bg-gray-300'
+                                }`}
+                            >
+                                {getPasswordResetButtonText()}
+                            </button>
                          )}
                          {(currentUser.role === 'ADMIN' || currentUser.permissions?.canSuspendUsers) && (
-                             <button type="button" onClick={handleToggleSuspend} className={`text-sm text-white px-3 py-1 rounded-md ${user.isSuspended ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'}`}>
-                                {user.isSuspended ? 'Unsuspend User' : 'Suspend User'}
+                             <button type="button" onClick={handleToggleSuspend} className={`text-sm text-white px-3 py-1 rounded-md ${formData.isSuspended ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'}`}>
+                                {formData.isSuspended ? 'Unsuspend User' : 'Suspend User'}
                             </button>
                          )}
                     </div>

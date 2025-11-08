@@ -231,6 +231,8 @@ const UserManagementTab: React.FC<{ currentUser: User; onImpersonate: (user: Use
     };
 
     const handleUpdateUser = (updatedUser: User) => {
+        // This is now primarily handled by the refetch on modal close,
+        // but can still be used for optimistic updates if desired.
         setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
     };
 
@@ -322,7 +324,10 @@ const UserManagementTab: React.FC<{ currentUser: User; onImpersonate: (user: Use
             {editingUser && (
                 <EditUserModal 
                     isOpen={!!editingUser}
-                    onClose={() => setEditingUser(null)}
+                    onClose={() => {
+                        setEditingUser(null);
+                        fetchUsers(); // Refresh data when modal closes
+                    }}
                     user={editingUser}
                     currentUser={currentUser}
                     onUpdateUser={handleUpdateUser}

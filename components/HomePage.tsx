@@ -45,6 +45,24 @@ const HomePage: React.FC<Props> = ({
     };
     fetchData();
   }, []);
+  
+  const availableQuestionsForStarter = useMemo(() => {
+    if (user.subscriptionTier !== 'STARTER' || !selectedExam) {
+      return null;
+    }
+    const perExamLimit = 2;
+    const usageForSelectedExam = user.monthlyExamUsage?.[selectedExam.name] || 0;
+    const remainingForExam = Math.max(0, perExamLimit - usageForSelectedExam);
+    const totalMonthlyRemaining = user.monthlyQuestionRemaining ?? 0;
+    
+    return Math.min(totalMonthlyRemaining, remainingForExam);
+  }, [user, selectedExam]);
+
+  useEffect(() => {
+    if (user.subscriptionTier === 'STARTER') {
+      setNumQuestions(availableQuestionsForStarter ?? 0);
+    }
+  }, [user.subscriptionTier, availableQuestionsForStarter]);
 
   const filteredExams = useMemo(() => {
     return exams.filter(exam =>
@@ -59,6 +77,11 @@ const HomePage: React.FC<Props> = ({
   };
   
   const getButtonProps = () => {
+    if (user.subscriptionTier === 'STARTER' && selectedExam) {
+      if ((availableQuestionsForStarter ?? 0) <= 0) {
+        return { text: 'Limit Reached', disabled: true };
+      }
+    }
     return { text: 'Start Quiz', disabled: !selectedExam };
   };
 
@@ -209,7 +232,23 @@ const HomePage: React.FC<Props> = ({
                 <div className="space-y-5">
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Number of Questions: {numQuestions}</label>
-                        <input type="range" min="1" max="120" step="1" value={numQuestions} onChange={e => setNumQuestions(Number(e.target.value))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" disabled={!selectedExam}/>
+                        <input 
+                            type="range" 
+                            min="1" 
+                            max="120" 
+                            step="1" 
+                            value={numQuestions} 
+                            onChange={e => setNumQuestions(Number(e.target.value))} 
+                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed" 
+                            disabled={!selectedExam || user.subscriptionTier === 'STARTER'}
+                        />
+                         {user.subscriptionTier === 'STARTER' && (
+                            <p className="text-xs text-gray-500 mt-1">
+                                {selectedExam
+                                ? `You have ${availableQuestionsForStarter} sample question(s) available for this exam.`
+                                : `The Starter plan includes up to a 2-question sample for each certification.`}
+                            </p>
+                        )}
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Focus on Specific Topics (Optional)</label>

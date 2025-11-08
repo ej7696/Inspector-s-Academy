@@ -93,6 +93,25 @@ const App: React.FC = () => {
   };
 
   const handleStartQuiz = (examName: string, numQuestions: number, isTimed: boolean, topics?: string) => {
+    let finalNumQuestions = numQuestions; // Default for paid users
+
+    if (currentUser?.subscriptionTier === 'STARTER') {
+      const perExamLimit = 2;
+      const usageForExam = currentUser.monthlyExamUsage?.[examName] || 0;
+      const remainingForExam = Math.max(0, perExamLimit - usageForExam);
+      const totalMonthlyRemaining = currentUser.monthlyQuestionRemaining ?? 0;
+      
+      finalNumQuestions = Math.min(totalMonthlyRemaining, remainingForExam);
+
+      if (finalNumQuestions <= 0) {
+        setErrorInfo({
+          title: 'Question Limit Reached',
+          message: `You have no more sample questions available for "${examName}" this month. Please try another exam or upgrade for unlimited access.`
+        });
+        return;
+      }
+    }
+
     // Enforce lock status for paid tiers
     if (currentUser && (currentUser.subscriptionTier === 'PROFESSIONAL' || currentUser.subscriptionTier === 'SPECIALIST')) {
       // Check 1: Is subscription active?
@@ -113,7 +132,7 @@ const App: React.FC = () => {
       }
     }
 
-    setQuizSettings({ examName, numQuestions, isTimed, topics, examMode: 'open' }); // default to open, will be set in next screen
+    setQuizSettings({ examName, numQuestions: finalNumQuestions, isTimed, topics, examMode: 'open' }); // default to open, will be set in next screen
     setCurrentView('select_mode');
   };
 
@@ -126,11 +145,13 @@ const App: React.FC = () => {
 
   const generateAndStartQuiz = async (settings: QuizSettings) => {
     if (currentUser?.subscriptionTier === 'STARTER') {
+      // Refresh user data to ensure limits are up to date
       const refreshedUser = api.checkAndResetMonthlyLimits(currentUser);
       if (refreshedUser !== currentUser) {
         setCurrentUser(refreshedUser);
       }
       
+      // Perform final check before generation (belt-and-suspenders approach)
       const monthlyRemaining = refreshedUser.monthlyQuestionRemaining || 0;
       if (settings.numQuestions > monthlyRemaining) {
         setErrorInfo({ title: 'Question Limit Reached', message: `You only have ${monthlyRemaining} questions remaining this month. Please select a smaller quiz size or upgrade your plan.`});
@@ -138,14 +159,9 @@ const App: React.FC = () => {
       }
 
       const usageForExam = refreshedUser.monthlyExamUsage?.[settings.examName] || 0;
-      const perExamLimit = 2; // As per the feature description
-      if (usageForExam >= perExamLimit) {
-        setErrorInfo({ title: 'Exam Limit Reached', message: `You have used your ${perExamLimit} free questions for the "${settings.examName}" exam this month. Please upgrade for unlimited access.`});
-        return;
-      }
-
+      const perExamLimit = 2;
       if (usageForExam + settings.numQuestions > perExamLimit) {
-         setErrorInfo({ title: 'Question Limit Exceeded', message: `You can only take ${perExamLimit - usageForExam} more question(s) for the "${settings.examName}" exam this month. Please select a smaller quiz size or upgrade.`});
+         setErrorInfo({ title: 'Question Limit Exceeded', message: `You can only take ${perExamLimit - usageForExam} more question(s) for the "${settings.examName}" exam this month.`});
         return;
       }
       
@@ -484,7 +500,7 @@ const App: React.FC = () => {
               <InfoDialog 
                 open={true}
                 title="Closed Book Section Complete"
-                message="You will now proceed to the Open Book portion of the exam. The timer will reset."
+                message="You will now proceed to the Open Book portion of the exam. You will be presented with the same set of questions, but now you can use your reference materials to answer them. The timer will reset for this section."
                 buttons={[{ text: "Start Open Book Section", style: 'primary', onClick: handleStartOpenBookSection }]}
               />
             )}
