@@ -21,8 +21,9 @@ import ForceChangePassword from './components/ForceChangePassword';
 import BlogPage from './components/BlogPage';
 import ArticlePage from './components/ArticlePage';
 
+
 type View = 'login' | 'home' | 'select_mode' | 'instructions' | 'quiz' | 'review' | 'score' | 'dashboard' | 'profile' | 'admin' | 'paywall' | 'select_unlocked_exams' | 'force_password_change';
-type AuthModal = 'login' | 'signup' | null;
+type AuthModal = 'login' | null;
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -48,10 +49,26 @@ const App: React.FC = () => {
   const [examToPurchase, setExamToPurchase] = useState<{name: string, price: string} | null>(null);
   const [authModal, setAuthModal] = useState<AuthModal>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [postLoginAction, setPostLoginAction] = useState<(() => void) | null>(null);
+  
+  const [path, setPath] = useState(window.location.pathname);
 
   const [followUpAnswer, setFollowUpAnswer] = useState('');
   const [isFollowUpLoading, setIsFollowUpLoading] = useState(false);
+
+  useEffect(() => {
+    const onLocationChange = () => {
+        setPath(window.location.pathname);
+    };
+    window.addEventListener('popstate', onLocationChange);
+    return () => {
+        window.removeEventListener('popstate', onLocationChange);
+    };
+  }, []);
+
+  const handleNavigate = (newPath: string) => {
+      window.history.pushState({}, '', newPath);
+      setPath(newPath);
+  };
 
   useEffect(() => {
     api.initializeData();
@@ -81,6 +98,7 @@ const App: React.FC = () => {
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);
     setAuthModal(null);
+    handleNavigate('/'); // Navigate to the main app view after successful login/signup
     
     if (user.mustChangePassword) {
       setCurrentView('force_password_change');
@@ -90,14 +108,8 @@ const App: React.FC = () => {
     if (user.isNewUser) {
         setShowOnboarding(true);
     }
-
-    if (postLoginAction) {
-        postLoginAction();
-        setPostLoginAction(null);
-    } else {
-        // After login, always go to the main app view
-        setCurrentView('home');
-    }
+    
+    setCurrentView('home');
   };
 
   const handleLogout = () => {
@@ -113,6 +125,7 @@ const App: React.FC = () => {
       setCurrentUser(null);
       setOriginalUser(null);
       resetQuizState();
+      handleNavigate('/'); // After logout, go to public homepage
     }
   };
 
@@ -236,7 +249,7 @@ const App: React.FC = () => {
     resetQuizState();
   };
   
-  const handleNavigate = (destination: 'next' | 'prev' | number) => {
+  const handleNavigateQuestion = (destination: 'next' | 'prev' | number) => {
       if (typeof destination === 'number') setCurrentQuestionIndex(destination);
       else {
           const newIndex = destination === 'next' ? currentQuestionIndex + 1 : currentQuestionIndex - 1;
@@ -351,8 +364,7 @@ const App: React.FC = () => {
   
   const handleUpgrade = (tier: SubscriptionTier) => {
     if (!currentUser) {
-        setPostLoginAction(() => () => handleUpgrade(tier));
-        setAuthModal('signup');
+        handleNavigate('/signup');
         return;
     }
     api.logActivity('view_paywall', 'viewed the upgrade options.', currentUser.id, currentUser.email);
@@ -396,7 +408,7 @@ const App: React.FC = () => {
       case 'home': return <HomePage user={currentUser!} onStartQuiz={handleStartQuiz} onViewDashboard={() => setCurrentView('dashboard')} onViewProfile={() => setCurrentView('profile')} onViewAdmin={() => setCurrentView('admin')} onLogout={handleLogout} onUpgrade={() => { api.logActivity('view_paywall', 'viewed upgrade options.', currentUser!.id, currentUser!.email); setCurrentView('paywall');}} onResumeQuiz={handleResumeQuiz} onAbandonQuiz={handleAbandonQuiz} onInitiateUnlockPurchase={handleInitiateUnlockPurchase} />;
       case 'select_mode': return <ExamModeSelector examName={quizSettings!.examName} onSelectMode={handleSelectExamMode} onGoHome={() => { resetQuizState(); setCurrentView('home'); }} />;
       case 'instructions': const exam = api.getExams().find(e => e.name === quizSettings!.examName); return <InstructionsModal examName={quizSettings!.examName} bodyOfKnowledge={exam?.bodyOfKnowledge || 'No details available.'} onStart={() => generateAndStartQuiz(quizSettings!)} onCancel={() => setCurrentView('select_mode')} />;
-      case 'quiz': return <>{isSimulationIntermission && <InfoDialog open={true} title="Closed Book Section Complete" message="You will now proceed to the Open Book portion of the exam. You will be presented with the same set of questions, but now you can use your reference materials to answer them. The timer will reset for this section." buttons={[{ text: "Start Open Book Section", style: 'primary', onClick: handleStartOpenBookSection }]} />}<ExamScreen key={quizPart} user={currentUser!} questions={questions} quizSettings={quizSettings!} currentIndex={currentQuestionIndex} answers={inProgressAnswers} onSelectAnswer={handleSelectAnswer} onNavigate={handleNavigate} onToggleFlag={handleToggleFlag} onToggleStrikethrough={handleToggleStrikethrough} onSubmit={handleSubmitQuiz} onSaveAndExit={handleSaveAndExit} onAutoSave={handleAutoSave} onAskFollowUp={handleAskFollowUp} followUpAnswer={followUpAnswer} isFollowUpLoading={isFollowUpLoading} /></>;
+      case 'quiz': return <>{isSimulationIntermission && <InfoDialog open={true} title="Closed Book Section Complete" message="You will now proceed to the Open Book portion of the exam. You will be presented with the same set of questions, but now you can use your reference materials to answer them. The timer will reset for this section." buttons={[{ text: "Start Open Book Section", style: 'primary', onClick: handleStartOpenBookSection }]} />}<ExamScreen key={quizPart} user={currentUser!} questions={questions} quizSettings={quizSettings!} currentIndex={currentQuestionIndex} answers={inProgressAnswers} onSelectAnswer={handleSelectAnswer} onNavigate={handleNavigateQuestion} onToggleFlag={handleToggleFlag} onToggleStrikethrough={handleToggleStrikethrough} onSubmit={handleSubmitQuiz} onSaveAndExit={handleSaveAndExit} onAutoSave={handleAutoSave} onAskFollowUp={handleAskFollowUp} followUpAnswer={followUpAnswer} isFollowUpLoading={isFollowUpLoading} /></>;
       case 'review': return <ReviewScreen questions={questions} answers={inProgressAnswers} onReviewQuestion={(index) => { setCurrentQuestionIndex(index); setCurrentView('quiz'); }} onFinalSubmit={handleFinalSubmit} onCancel={() => setCurrentView('quiz')} />;
       case 'score': return <ScoreScreen result={quizResult!} onRestart={() => handleStartQuiz(quizResult!.examName, quizResult!.totalQuestions, quizSettings?.isTimed || false, quizSettings?.topics)} onGoHome={() => { resetQuizState(); setCurrentView('home'); }} isPro={currentUser!.subscriptionTier !== 'STARTER'} onViewDashboard={() => setCurrentView('dashboard')} onRegenerate={() => { resetQuizState(); handleStartQuiz(quizResult!.examName, 120, true);}} />;
       case 'dashboard': return <Dashboard user={currentUser!} onGoHome={() => setCurrentView('home')} onStartWeaknessQuiz={(topics) => handleStartQuiz(currentUser!.unlockedExams[0] || 'API 510', 20, false, topics)} onUpgrade={() => { api.logActivity('view_paywall', 'viewed upgrade options.', currentUser!.id, currentUser!.email); setCurrentView('paywall');}} />;
@@ -410,16 +422,18 @@ const App: React.FC = () => {
   };
 
   const renderPublicContent = () => {
-    const path = window.location.pathname;
     if (path.startsWith('/blog/')) {
-        const slug = path.split('/blog/')[1];
-        return <ArticlePage slug={slug} onNavigate={(newPath) => window.history.pushState({}, '', newPath)} />;
+        const slug = path.substring('/blog/'.length);
+        return <ArticlePage slug={slug} onNavigate={handleNavigate} />;
     }
     if (path === '/blog') {
-        return <BlogPage onNavigateHome={() => window.history.pushState({}, '', '/')} />;
+        return <BlogPage onNavigateHome={() => handleNavigate('/')} />;
     }
     if (path === '/login') {
-        return <Login onLoginSuccess={handleLoginSuccess} />;
+        return <Login onLoginSuccess={handleLoginSuccess} initialView="login" onNavigate={handleNavigate} />;
+    }
+    if (path === '/signup') {
+        return <Login onLoginSuccess={handleLoginSuccess} initialView="signup" onNavigate={handleNavigate} />;
     }
 
     // Default to the main landing page
@@ -427,10 +441,14 @@ const App: React.FC = () => {
         <PublicWebsite 
             currentUser={currentUser}
             onLogin={() => setAuthModal('login')}
-            onSignup={() => setAuthModal('signup')}
+            onSignup={() => handleNavigate('/signup')}
             onLogout={handleLogout} 
-            onGoToDashboard={() => setCurrentView('home')}
-            onNavigate={(newPath) => window.history.pushState({}, '', newPath)}
+            onGoToDashboard={() => {
+                // This will re-render the app into the logged-in view
+                handleNavigate('/');
+                setCurrentView('home');
+            }}
+            onNavigate={handleNavigate}
         />
     );
   };
@@ -453,7 +471,7 @@ const App: React.FC = () => {
       {!currentUser ? (
         <>
             {renderPublicContent()}
-            {authModal && <Login onLoginSuccess={handleLoginSuccess} isModal onCancel={() => setAuthModal(null)} />}
+            {authModal === 'login' && <Login onLoginSuccess={handleLoginSuccess} isModal onCancel={() => setAuthModal(null)} initialView="login" />}
         </>
       ) : (
         <>

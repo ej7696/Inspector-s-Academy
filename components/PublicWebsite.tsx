@@ -39,21 +39,20 @@ const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogo
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-md sticky top-0 z-40">
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex items-center justify-between h-20">
             <div className="flex items-center cursor-pointer" onClick={() => onNavigate('/')}>
-                <Logo className="h-12 w-auto" />
+                <Logo className="h-16 w-auto" />
             </div>
             <div className="flex items-center gap-2">
-                <button onClick={() => onNavigate('/blog')} className="px-4 py-2 text-sm font-semibold text-gray-700 rounded-md hover:bg-gray-100">Resources</button>
                 {currentUser ? (
                     <>
-                        <button onClick={onGoToDashboard} className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700">Dashboard</button>
-                        <button onClick={onLogout} className="px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300">Logout</button>
+                        <button onClick={onGoToDashboard} className="px-4 py-2 text-base font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700">Dashboard</button>
+                        <button onClick={onLogout} className="px-4 py-2 text-base font-semibold text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300">Logout</button>
                     </>
                 ) : (
                     <>
-                        <button onClick={onLogin} className="px-4 py-2 text-sm font-semibold text-gray-700 rounded-md hover:bg-gray-100">Log In</button>
-                        <button onClick={onSignup} className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700">Sign Up Free</button>
+                        <button onClick={onLogin} className="px-4 py-2 text-base font-semibold text-gray-700 rounded-md hover:bg-gray-100">Log In</button>
+                        <button onClick={() => onNavigate('/signup')} className="px-4 py-2 text-base font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700">Sign Up Free</button>
                     </>
                 )}
             </div>
@@ -93,7 +92,7 @@ const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogo
                 </div>
 
                 <div className="mt-6 flex justify-center gap-4">
-                    <button onClick={onSignup} className="bg-blue-600 text-white font-bold py-3 px-8 rounded-lg text-lg hover:bg-blue-700 transition-transform hover:scale-105">
+                    <button onClick={() => onNavigate('/signup')} className="bg-blue-600 text-white font-bold py-3 px-8 rounded-lg text-lg hover:bg-blue-700 transition-transform hover:scale-105">
                         Start Practicing for Free
                     </button>
                 </div>
@@ -189,7 +188,7 @@ const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogo
                      <h2 className="text-3xl font-extrabold text-gray-900">Ready to Pass With Confidence?</h2>
                      <p className="mt-4 text-lg text-gray-600">Start for free today. Upgrade when you're ready for unlimited access.</p>
                  </div>
-                <PricingTiers user={{ subscriptionTier: 'STARTER' } as User} onUpgrade={onSignup} />
+                <PricingTiers user={{ subscriptionTier: 'STARTER' } as User} onUpgrade={() => onNavigate('/signup')} />
              </div>
         </div>
 
@@ -199,9 +198,6 @@ const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogo
       <footer className="bg-gray-800 text-white">
         <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
             <p className="text-sm">&copy; {new Date().getFullYear()} Inspector's Academy. All rights reserved.</p>
-            <div className="text-sm text-gray-400">
-                <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('/blog'); }} className="hover:text-white">Resources</a>
-            </div>
         </div>
       </footer>
 

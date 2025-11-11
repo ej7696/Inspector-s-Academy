@@ -7,10 +7,12 @@ interface Props {
   onLoginSuccess: (user: User) => void;
   isModal?: boolean;
   onCancel?: () => void;
+  initialView?: 'login' | 'signup';
+  onNavigate?: (path: string) => void;
 }
 
-const Login: React.FC<Props> = ({ onLoginSuccess, isModal = false, onCancel }) => {
-  const [view, setView] = useState<'login' | 'signup'>('login');
+const Login: React.FC<Props> = ({ onLoginSuccess, isModal = false, onCancel, initialView = 'login', onNavigate }) => {
+  const [view, setView] = useState<'login' | 'signup'>(initialView);
   
   // Login State
   const [email, setEmail] = useState('');
@@ -79,7 +81,11 @@ const Login: React.FC<Props> = ({ onLoginSuccess, isModal = false, onCancel }) =
   
   const switchView = (newView: 'login' | 'signup') => {
       resetForm();
-      setView(newView);
+      if (onNavigate) {
+        onNavigate(newView === 'login' ? '/login' : '/signup');
+      } else {
+        setView(newView);
+      }
   };
   
   // --- RENDER LOGIC ---
@@ -121,10 +127,12 @@ const Login: React.FC<Props> = ({ onLoginSuccess, isModal = false, onCancel }) =
     </>
   );
 
+  const currentRenderView = isModal ? view : initialView;
+
   const content = (
     <div className="p-8 sm:p-12 flex flex-col justify-center animate-fade-in-up relative">
       {isModal && <button onClick={onCancel} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-2xl">&times;</button>}
-      {view === 'login' ? renderLogin() : renderSignup()}
+      {currentRenderView === 'login' ? renderLogin() : renderSignup()}
       {!isModal && (
         <div className="mt-8 text-center">
             <p className="text-sm text-gray-500 mb-3" style={{ fontFamily: 'Poppins, sans-serif' }}>Or Explore the Platform With a Demo Account</p>
