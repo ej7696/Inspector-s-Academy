@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { User, ActivityEvent, Exam, QuizResult, SubscriptionTier, ActivityEventType, Role } from '../types';
 import api from '../services/apiService';
@@ -5,8 +6,9 @@ import AddUserModal from './AddUserModal';
 import EditUserModal from './EditUserModal';
 import ExamManager from './ExamManager';
 import AnnouncementManager from './AnnouncementManager';
+import GrowthAnalyticsTab from './GrowthAnalyticsTab';
 
-type Tab = 'dashboard' | 'users' | 'exams' | 'announcements';
+type Tab = 'dashboard' | 'users' | 'exams' | 'announcements' | 'growth';
 
 const AdminDashboard: React.FC<{ onGoHome: () => void; currentUser: User, onImpersonate: (user: User) => void; }> = ({ onGoHome, currentUser, onImpersonate }) => {
     const [activeTab, setActiveTab] = useState<Tab>('dashboard');
@@ -21,6 +23,8 @@ const AdminDashboard: React.FC<{ onGoHome: () => void; currentUser: User, onImpe
                 return <ExamManager />;
             case 'announcements':
                 return <AnnouncementManager />;
+            case 'growth':
+                return <GrowthAnalyticsTab />;
             default:
                 return null;
         }
@@ -29,6 +33,7 @@ const AdminDashboard: React.FC<{ onGoHome: () => void; currentUser: User, onImpe
     const canManageAnnouncements = currentUser.role === 'ADMIN' || currentUser.permissions?.canManageAnnouncements;
     const canManageExams = currentUser.role === 'ADMIN' || currentUser.permissions?.canManageExams;
     const canViewUsers = currentUser.role === 'ADMIN' || currentUser.permissions?.canViewUserList;
+    const canViewGrowth = currentUser.role === 'ADMIN';
 
     return (
         <div className="max-w-7xl mx-auto p-4 md:p-6 font-sans">
@@ -42,6 +47,7 @@ const AdminDashboard: React.FC<{ onGoHome: () => void; currentUser: User, onImpe
                 <nav className="-mb-px flex space-x-6" aria-label="Tabs">
                     <TabButton name="Dashboard" tab="dashboard" activeTab={activeTab} onClick={setActiveTab} />
                     {canViewUsers && <TabButton name="User Management" tab="users" activeTab={activeTab} onClick={setActiveTab} />}
+                    {canViewGrowth && <TabButton name="Growth" tab="growth" activeTab={activeTab} onClick={setActiveTab} />}
                     {canManageExams && <TabButton name="Exam Content" tab="exams" activeTab={activeTab} onClick={setActiveTab} />}
                     {canManageAnnouncements && <TabButton name="Announcements" tab="announcements" activeTab={activeTab} onClick={setActiveTab} />}
                 </nav>

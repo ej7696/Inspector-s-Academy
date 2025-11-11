@@ -1,7 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import { BlogPost } from '../types';
 import api from '../services/apiService';
 import Logo from './Logo';
+import LeadMagnetForm from './LeadMagnetForm';
 
 interface Props {
   slug: string;
@@ -69,6 +71,10 @@ const ArticlePage: React.FC<Props> = ({ slug, onNavigate }) => {
                 {renderContent(post.content)}
             </div>
         </article>
+
+        <div className="mt-16">
+            <LeadMagnetForm />
+        </div>
       </main>
 
        <footer className="bg-gray-800 text-white mt-16">

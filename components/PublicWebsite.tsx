@@ -1,9 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
 import { User, Testimonial } from '../types';
 import Logo from './Logo';
 import api from '../services/apiService';
 import PricingTiers from './PricingTiers';
 import VideoLightbox from './VideoLightbox';
+import FreeSampleQuiz from './FreeSampleQuiz';
 
 interface Props {
   currentUser: User | null;
@@ -141,8 +143,19 @@ const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogo
             </div>
         </div>
         
-        {/* === SECTION 3: FEATURE BREAKDOWN (DESIRE) === */}
+        {/* === NEW SECTION: FREE SAMPLE QUIZ === */}
         <div className="py-16 bg-gray-50">
+            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+                <h2 className="text-3xl font-extrabold text-gray-900">Try it Now. No Signup Required.</h2>
+                <p className="mt-4 text-lg text-gray-600">Experience the quality of our Dynamic Question Engine with this free 3-question sample quiz.</p>
+                <div className="mt-8">
+                    <FreeSampleQuiz onSignup={() => onNavigate('/signup')} />
+                </div>
+            </div>
+        </div>
+
+        {/* === SECTION 3: FEATURE BREAKDOWN (DESIRE) === */}
+        <div className="py-16 bg-white">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-16">
                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
                     <div className="p-4">
@@ -170,7 +183,7 @@ const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogo
 
         {/* === SECTION 4: SOCIAL PROOF (DESIRE) === */}
         {testimonial && (
-            <div className="bg-white py-16">
+            <div className="bg-gray-50 py-16">
                  <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
                     <img src="https://i.ibb.co/Q8QvV9w/testimonial-avatar.png" alt="User testimonial photo" className="w-20 h-20 rounded-full mx-auto mb-4" />
                     <blockquote className="text-xl text-gray-700 italic">
@@ -182,7 +195,7 @@ const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogo
         )}
         
         {/* === SECTION 5: PRICING & CTA (ACTION) === */}
-        <div className="bg-gray-50 py-16">
+        <div className="bg-white py-16">
              <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
                  <div className="text-center mb-12">
                      <h2 className="text-3xl font-extrabold text-gray-900">Ready to Pass With Confidence?</h2>
