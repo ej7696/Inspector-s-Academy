@@ -68,6 +68,7 @@ export interface User {
   email: string;
   phoneNumber?: string;
   password?: string; // Should be handled securely on a real backend
+  mustChangePassword?: boolean;
   subscriptionTier: SubscriptionTier;
   paidUnlockSlots: number;
   subscriptionExpiresAt?: number | null;

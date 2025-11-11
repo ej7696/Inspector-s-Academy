@@ -150,7 +150,7 @@ class ApiService {
     return userToUpdate;
   }
 
-  addUser(newUser: Omit<User, 'id' | 'subscriptionTier' | 'unlockedExams' | 'history' | 'inProgressQuiz' | 'createdAt' | 'lastActive' | 'monthlyQuestionRemaining' | 'monthlyExamUsage' | 'monthlyResetDate' | 'permissions' | 'subscriptionExpiresAt' | 'isSuspended' | 'paidUnlockSlots' | 'isNewUser' | 'referralCode' | 'accountCredit'> & { role: Role }): User {
+  addUser(newUser: Omit<User, 'id' | 'subscriptionTier' | 'unlockedExams' | 'history' | 'inProgressQuiz' | 'createdAt' | 'lastActive' | 'monthlyQuestionRemaining' | 'monthlyExamUsage' | 'monthlyResetDate' | 'permissions' | 'subscriptionExpiresAt' | 'isSuspended' | 'paidUnlockSlots' | 'isNewUser' | 'referralCode' | 'accountCredit' | 'mustChangePassword'> & { role: Role }): User {
     const users = this.getAllUsers();
     if (users.some(u => u.email.toLowerCase() === newUser.email.toLowerCase())) {
         throw new Error('A user with this email already exists.');
@@ -167,6 +167,7 @@ class ApiService {
       createdAt: now,
       lastActive: now,
       isNewUser: true,
+      mustChangePassword: false,
       referralCode: `REF${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
       accountCredit: 0,
       monthlyQuestionRemaining: 15,
@@ -178,10 +179,13 @@ class ApiService {
     return user;
   }
 
-  async sendPasswordReset(email: string): Promise<void> {
-    console.log(`Password reset sent to ${email}`);
-    // In a real app, this would trigger a backend service.
-    return Promise.resolve();
+  adminResetPassword(userId: string): string {
+    const tempPassword = `Reset-${Math.random().toString(36).substring(2, 10)}`;
+    this.updateUser(userId, {
+      password: tempPassword,
+      mustChangePassword: true,
+    });
+    return tempPassword;
   }
 
   exportAllUsersAsCSV() {

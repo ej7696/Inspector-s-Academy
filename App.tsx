@@ -17,8 +17,9 @@ import InfoDialog from './components/InfoDialog';
 import ExamUnlockSelector from './components/ExamUnlockSelector';
 import PublicWebsite from './components/PublicWebsite';
 import OnboardingTour from './components/OnboardingTour';
+import ForceChangePassword from './components/ForceChangePassword';
 
-type View = 'login' | 'home' | 'select_mode' | 'instructions' | 'quiz' | 'review' | 'score' | 'dashboard' | 'profile' | 'admin' | 'paywall' | 'select_unlocked_exams';
+type View = 'login' | 'home' | 'select_mode' | 'instructions' | 'quiz' | 'review' | 'score' | 'dashboard' | 'profile' | 'admin' | 'paywall' | 'select_unlocked_exams' | 'force_password_change';
 type AuthModal = 'login' | 'signup' | null;
 
 const App: React.FC = () => {
@@ -79,6 +80,11 @@ const App: React.FC = () => {
     setCurrentUser(user);
     setAuthModal(null);
     
+    if (user.mustChangePassword) {
+      setCurrentView('force_password_change');
+      return;
+    }
+
     if (user.isNewUser) {
         setShowOnboarding(true);
     }
@@ -356,7 +362,13 @@ const App: React.FC = () => {
     setCurrentView('select_unlocked_exams');
   };
 
-  const handleInitiateUnlockPurchase = (examName: string, price: string) => setExamToPurchase({ name: examName, price });
+  const handleInitiateUnlockPurchase = (examName: string, price: string) => {
+      if (!currentUser?.subscriptionExpiresAt || Date.now() > currentUser.subscriptionExpiresAt) {
+        setErrorInfo({ title: 'Subscription Expired', message: 'You must have an active subscription to unlock additional exams. Please renew your plan.' });
+        return;
+      }
+      setExamToPurchase({ name: examName, price });
+  };
   
   const handleConfirmUnlockPurchase = () => {
     if (!currentUser) return;
@@ -388,6 +400,7 @@ const App: React.FC = () => {
       case 'admin': return <AdminDashboard onGoHome={() => setCurrentView('home')} currentUser={currentUser!} onImpersonate={handleImpersonate} />;
       case 'paywall': return <Paywall user={currentUser!} onUpgrade={handleUpgrade} onCancel={() => setCurrentView('home')} />;
       case 'select_unlocked_exams': return <ExamUnlockSelector user={currentUser!} onConfirmUnlock={handleConfirmUnlock} onCancel={() => setCurrentView('home')} />;
+      case 'force_password_change': return <ForceChangePassword user={currentUser!} onPasswordChanged={() => setCurrentView('home')} />;
       default: return <HomePage user={currentUser!} onStartQuiz={handleStartQuiz} onViewDashboard={() => setCurrentView('dashboard')} onViewProfile={() => setCurrentView('profile')} onViewAdmin={() => setCurrentView('admin')} onLogout={handleLogout} onUpgrade={() => setCurrentView('paywall')} onResumeQuiz={handleResumeQuiz} onAbandonQuiz={handleAbandonQuiz} onInitiateUnlockPurchase={handleInitiateUnlockPurchase} />;
     }
   };
@@ -405,7 +418,7 @@ const App: React.FC = () => {
         </div>
       )}
       {errorInfo && ( <InfoDialog open={true} title={errorInfo.title} message={errorInfo.message} buttons={[{ text: 'Return to Home', style: 'primary', onClick: () => { setErrorInfo(null); resetQuizState(); setCurrentView('home'); }}]} /> )}
-      {examToPurchase && currentUser && ( <InfoDialog open={true} title="Confirm Purchase" message={`You are about to purchase access to the "${examToPurchase.name}" certification track for ${examToPurchase.price}." This is a one-time, non-refundable charge.`} buttons={[{ text: 'Cancel', style: 'neutral', onClick: () => setExamToPurchase(null) }, { text: 'Confirm Purchase', style: 'primary', onClick: handleConfirmUnlockPurchase }]} /> )}
+      {examToPurchase && currentUser && ( <InfoDialog open={true} title="Confirm Purchase" message={`You are about to purchase access to the "${examToPurchase.name}" certification track for ${examToPurchase.price}. This access is valid for the remainder of your current subscription period, ending on ${new Date(currentUser.subscriptionExpiresAt!).toLocaleDateString()}.`} buttons={[{ text: 'Cancel', style: 'neutral', onClick: () => setExamToPurchase(null) }, { text: 'Confirm Purchase', style: 'primary', onClick: handleConfirmUnlockPurchase }]} /> )}
       
       {!currentUser ? (
         <>
@@ -414,10 +427,12 @@ const App: React.FC = () => {
                 onLogin={() => setAuthModal('login')}
                 onSignup={() => setAuthModal('signup')}
                 onLogout={handleLogout} // for completeness
-                onGoToDashboard={() => setCurrentView('home')} // for completeness
+                onGoToDashboard={() => {
+                  setAuthModal('login');
+                  setPostLoginAction(() => () => setCurrentView('home'));
+                }}
             />
-            {authModal === 'login' && <Login onLoginSuccess={handleLoginSuccess} isModal onCancel={() => setAuthModal(null)} />}
-            {authModal === 'signup' && <Login onLoginSuccess={handleLoginSuccess} isModal onCancel={() => setAuthModal(null)} />}
+            {authModal && <Login onLoginSuccess={handleLoginSuccess} isModal onCancel={() => setAuthModal(null)} />}
         </>
       ) : (
         <>

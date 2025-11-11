@@ -17,20 +17,16 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [actionMessage, setActionMessage] = useState('');
-  const [resetStatus, setResetStatus] = useState<'idle' | 'sending' | 'sent'>('idle');
+  const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
 
 
   useEffect(() => {
-    // CRITICAL FIX: Depend on user.id.
-    // This ensures the form only re-initializes when a NEW user is selected for editing.
-    // It prevents the parent's re-renders (after an update) from overwriting this modal's
-    // internal state, which preserves the feedback messages (e.g., "User suspended").
     if (isOpen) {
       setFormData(user);
       setAllExams(api.getExams());
       setError('');
       setActionMessage('');
-      setResetStatus('idle');
+      setGeneratedPassword(null);
     }
   }, [user.id, isOpen]);
 
@@ -78,23 +74,17 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
     }
   };
   
-  const handlePasswordReset = () => {
+  const handleAdminPasswordReset = () => {
     setError('');
-    if (resetStatus !== 'idle') return;
-
-    if (window.confirm(`Are you sure you want to send a password reset to ${user.email}?`)) {
-      setResetStatus('sending');
-      api.sendPasswordReset(user.email)
-        .then(() => {
-          setResetStatus('sent');
-          setTimeout(() => {
-            setResetStatus('idle'); // Reset after 3 seconds
-          }, 3000);
-        })
-        .catch((err: any) => {
-          setError(err.message || 'Failed to send reset email.');
-          setResetStatus('idle');
-        });
+    setActionMessage('');
+    if (window.confirm(`Are you sure you want to reset the password for ${user.email}? Their old password will no longer work.`)) {
+        try {
+            const tempPassword = api.adminResetPassword(user.id);
+            setGeneratedPassword(tempPassword);
+            setActionMessage('Temporary password generated. Please copy it now.');
+        } catch (err: any) {
+            setError(err.message || 'Failed to reset password.');
+        }
     }
   };
 
@@ -107,41 +97,28 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
     if (window.confirm(`Are you sure you want to ${action} this user?`)) {
       try {
         const newSuspendedState = !isCurrentlySuspended;
-        // 1. Update data source
         const updatedUser = api.updateUser(user.id, { isSuspended: newSuspendedState });
-        
-        // 2. Update parent state for optimistic UI
-        onUpdateUser(updatedUser);
-
-        // 3. Update local state for immediate feedback within the modal
         setFormData(updatedUser);
-        
         setActionMessage(`User has been successfully ${newSuspendedState ? 'suspended' : 'unsuspended'}.`);
-        
-        setTimeout(() => {
-          setActionMessage('');
-        }, 3000);
-
-      } catch (err: any)
-      {
+        setTimeout(() => { setActionMessage(''); }, 3000);
+      } catch (err: any) {
         setError(err.message || `Failed to ${action} user.`);
       }
     }
   };
-  
-  const getPasswordResetButtonText = () => {
-    switch(resetStatus) {
-      case 'sending': return 'Sending...';
-      case 'sent': return 'Sent!';
-      case 'idle':
-      default: return 'Send Password Reset';
+
+  const copyToClipboard = () => {
+    if (generatedPassword) {
+        navigator.clipboard.writeText(generatedPassword).then(() => {
+            setActionMessage('Password copied to clipboard!');
+            setTimeout(() => setActionMessage(''), 2000);
+        });
     }
   };
 
   const canEditRole = currentUser.role === 'ADMIN' && currentUser.id !== user.id && user.role !== 'ADMIN';
   const canPerformActionsOnUser = currentUser.id !== user.id && (currentUser.role === 'ADMIN' || (currentUser.role === 'SUB_ADMIN' && user.role === 'USER'));
   const canManageSubs = currentUser.role === 'ADMIN' || !!currentUser.permissions?.canManageSubscriptions;
-
 
   if (!isOpen) return null;
 
@@ -233,21 +210,18 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
                 </fieldset>
             )}
             
-            {/* Quick Actions */}
+            {/* Credential Management */}
             {canPerformActionsOnUser && (
                 <div>
-                    <label className="block text-sm font-bold text-gray-700">Quick Actions</label>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                         {(currentUser.role === 'ADMIN' || currentUser.permissions?.canSendPasswordResets) && (
+                    <label className="block text-sm font-bold text-gray-700">Credential Management</label>
+                    <div className="mt-2 flex flex-wrap gap-2 items-start">
+                         {(currentUser.role === 'ADMIN' || currentUser.permissions?.canSendPasswordResets) && !generatedPassword && (
                             <button 
                                 type="button" 
-                                onClick={handlePasswordReset} 
-                                disabled={resetStatus !== 'idle'}
-                                className={`text-sm px-3 py-1 rounded-md transition-colors ${
-                                    resetStatus === 'sent' ? 'bg-green-500 text-white' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200 disabled:bg-gray-300'
-                                }`}
+                                onClick={handleAdminPasswordReset} 
+                                className='text-sm px-3 py-1 rounded-md transition-colors bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
                             >
-                                {getPasswordResetButtonText()}
+                                Generate Temporary Password
                             </button>
                          )}
                          {(currentUser.role === 'ADMIN' || currentUser.permissions?.canSuspendUsers) && (
@@ -256,6 +230,16 @@ const EditUserModal: React.FC<Props> = ({ isOpen, onClose, user, currentUser, on
                             </button>
                          )}
                     </div>
+                    {generatedPassword && (
+                        <div className="mt-4 p-4 bg-yellow-50 border-l-4 border-yellow-400">
+                            <h4 className="font-bold text-yellow-800">Temporary Password Generated</h4>
+                            <p className="text-sm text-yellow-700 mt-1">This is shown only once. Copy it now and send it to the user. They will be required to change it on their next login.</p>
+                            <div className="mt-2 flex items-center gap-2 bg-white p-2 rounded-md">
+                                <span className="font-mono text-gray-800 flex-grow">{generatedPassword}</span>
+                                <button type="button" onClick={copyToClipboard} className="bg-gray-200 hover:bg-gray-300 px-3 py-1 text-sm font-semibold rounded-md">Copy</button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
             
