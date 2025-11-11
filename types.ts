@@ -109,7 +109,9 @@ export type ActivityEventType =
   | 'one_time_unlock' 
   | 'quiz_complete'
   | 'quiz_start'
-  | 'view_paywall';
+  | 'view_paywall'
+  | 'lead_captured'
+  | 'sample_quiz_completed';
 
 export interface ActivityEvent {
   id: string;
@@ -150,4 +152,14 @@ export interface Testimonial {
     id: string;
     author: string;
     quote: string;
+}
+
+export interface BlogPost {
+    slug: string;
+    title: string;
+    author: string;
+    date: string;
+    excerpt: string;
+    content: string;
+    tags: string[];
 }

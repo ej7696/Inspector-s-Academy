@@ -18,6 +18,8 @@ import ExamUnlockSelector from './components/ExamUnlockSelector';
 import PublicWebsite from './components/PublicWebsite';
 import OnboardingTour from './components/OnboardingTour';
 import ForceChangePassword from './components/ForceChangePassword';
+import BlogPage from './components/BlogPage';
+import ArticlePage from './components/ArticlePage';
 
 type View = 'login' | 'home' | 'select_mode' | 'instructions' | 'quiz' | 'review' | 'score' | 'dashboard' | 'profile' | 'admin' | 'paywall' | 'select_unlocked_exams' | 'force_password_change';
 type AuthModal = 'login' | 'signup' | null;
@@ -93,6 +95,10 @@ const App: React.FC = () => {
         postLoginAction();
         setPostLoginAction(null);
     } else {
+        // If logging in from a public page, go home, otherwise stay.
+        if (window.location.pathname !== '/') {
+             window.history.pushState({}, '', '/');
+        }
         setCurrentView('home');
     }
   };
@@ -110,6 +116,9 @@ const App: React.FC = () => {
       setCurrentUser(null);
       setOriginalUser(null);
       // This will automatically render the PublicWebsite
+      if (window.location.pathname !== '/') {
+        window.history.pushState({}, '', '/');
+      }
       resetQuizState();
     }
   };
@@ -404,6 +413,35 @@ const App: React.FC = () => {
       default: return <HomePage user={currentUser!} onStartQuiz={handleStartQuiz} onViewDashboard={() => setCurrentView('dashboard')} onViewProfile={() => setCurrentView('profile')} onViewAdmin={() => setCurrentView('admin')} onLogout={handleLogout} onUpgrade={() => setCurrentView('paywall')} onResumeQuiz={handleResumeQuiz} onAbandonQuiz={handleAbandonQuiz} onInitiateUnlockPurchase={handleInitiateUnlockPurchase} />;
     }
   };
+
+  const renderPublicContent = () => {
+    const path = window.location.pathname;
+    if (path.startsWith('/blog/')) {
+        const slug = path.split('/blog/')[1];
+        return <ArticlePage slug={slug} onNavigate={() => window.history.pushState({}, '', '/blog')} />;
+    }
+    if (path === '/blog') {
+        return <BlogPage onNavigateHome={() => window.history.pushState({}, '', '/')} />;
+    }
+    if (path === '/login') {
+        return <Login onLoginSuccess={handleLoginSuccess} />;
+    }
+
+    // Default to the main landing page
+    return (
+        <PublicWebsite 
+            currentUser={null}
+            onLogin={() => setAuthModal('login')}
+            onSignup={() => setAuthModal('signup')}
+            onLogout={handleLogout} // for completeness
+            onGoToDashboard={() => {
+              setAuthModal('login');
+              setPostLoginAction(() => () => setCurrentView('home'));
+            }}
+            onNavigate={(path) => window.history.pushState({}, '', path)}
+        />
+    );
+  };
   
   if (isLoading) {
     return <div className="flex items-center justify-center h-screen text-xl font-semibold">{loadingMessage || 'Loading Application...'}</div>;
@@ -422,16 +460,7 @@ const App: React.FC = () => {
       
       {!currentUser ? (
         <>
-            <PublicWebsite 
-                currentUser={null}
-                onLogin={() => setAuthModal('login')}
-                onSignup={() => setAuthModal('signup')}
-                onLogout={handleLogout} // for completeness
-                onGoToDashboard={() => {
-                  setAuthModal('login');
-                  setPostLoginAction(() => () => setCurrentView('home'));
-                }}
-            />
+            {renderPublicContent()}
             {authModal && <Login onLoginSuccess={handleLoginSuccess} isModal onCancel={() => setAuthModal(null)} />}
         </>
       ) : (

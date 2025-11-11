@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { User, Question, ActivityEvent, Exam, Announcement, SubscriptionTierDetails, Role, QuizResult, InProgressQuizState, InProgressAnswer, UserAnswer, SubscriptionTier, Testimonial } from '../types';
+import { User, Question, ActivityEvent, Exam, Announcement, SubscriptionTierDetails, Role, QuizResult, InProgressQuizState, InProgressAnswer, UserAnswer, SubscriptionTier, Testimonial, BlogPost } from '../types';
 import { seedData } from './seedData';
 import { examSourceData } from './examData';
 
@@ -14,6 +14,7 @@ const LOCAL_STORAGE_KEYS = {
   SUBSCRIPTION_TIERS: 'inspectors_academy_subscription_tiers',
   TESTIMONIALS: 'inspectors_academy_testimonials',
   LEADS: 'inspectors_academy_leads',
+  BLOG_POSTS: 'inspectors_academy_blog_posts',
 };
 
 class ApiService {
@@ -48,6 +49,9 @@ class ApiService {
     }
      if (!localStorage.getItem(LOCAL_STORAGE_KEYS.LEADS)) {
       localStorage.setItem(LOCAL_STORAGE_KEYS.LEADS, JSON.stringify([]));
+    }
+    if (!localStorage.getItem(LOCAL_STORAGE_KEYS.BLOG_POSTS)) {
+      localStorage.setItem(LOCAL_STORAGE_KEYS.BLOG_POSTS, JSON.stringify(seedData.blogPosts));
     }
   }
 
@@ -210,6 +214,7 @@ class ApiService {
         leads.push(email);
         localStorage.setItem(LOCAL_STORAGE_KEYS.LEADS, JSON.stringify(leads));
     }
+    this.logActivity('lead_captured', `captured lead: ${email}`, 'anonymous', 'anonymous');
     console.log(`Lead captured: ${email}`);
   }
 
@@ -226,6 +231,15 @@ class ApiService {
       };
       testimonials.push(newTestimonial);
       localStorage.setItem(LOCAL_STORAGE_KEYS.TESTIMONIALS, JSON.stringify(testimonials));
+  }
+
+  // --- Blog / Content ---
+  getBlogPosts(): BlogPost[] {
+    return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.BLOG_POSTS) || '[]');
+  }
+  
+  getBlogPostBySlug(slug: string): BlogPost | undefined {
+    return this.getBlogPosts().find(p => p.slug === slug);
   }
 
 

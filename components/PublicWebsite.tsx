@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
-import { User } from '../types';
+import React, { useState, useEffect } from 'react';
+import { User, Testimonial } from '../types';
 import Logo from './Logo';
 import api from '../services/apiService';
+import PricingTiers from './PricingTiers';
+import VideoLightbox from './VideoLightbox';
 
 interface Props {
   currentUser: User | null;
@@ -9,78 +11,31 @@ interface Props {
   onSignup: () => void;
   onLogout: () => void;
   onGoToDashboard: () => void;
+  onNavigate: (path: string) => void;
 }
 
-const FreeSampleQuiz: React.FC<{onSignup: () => void}> = ({ onSignup }) => {
-    const questions = [
-        { q: "The welding performance qualification is only limited by:", a: "essential variables." },
-        { q: "What type of relief device is designed to be opened by knife blades?", a: "Reverse acting rupture disk" },
-        { q: "Who is responsible for implementing and executing an effective MOC process?", a: "Owner/User" }
-    ];
-    const [current, setCurrent] = useState(0);
-    const [isFinished, setIsFinished] = useState(false);
+const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogout, onGoToDashboard, onNavigate }) => {
+  const [testimonial, setTestimonial] = useState<Testimonial | null>(null);
+  const [isVideoOpen, setIsVideoOpen] = useState(false);
 
-    if (isFinished) {
-        return (
-            <div className="text-center p-6 bg-green-50 border border-green-200 rounded-lg">
-                <h3 className="text-xl font-bold text-green-800">Great Job!</h3>
-                <p className="mt-2 text-green-700">You've sampled the quality of our AI-generated questions.</p>
-                <button onClick={onSignup} className="mt-4 bg-green-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-700 transition-colors">
-                    Sign Up for Free to Continue
-                </button>
-            </div>
-        );
+  useEffect(() => {
+    const testimonials = api.getTestimonials();
+    if (testimonials.length > 0) {
+      setTestimonial(testimonials[Math.floor(Math.random() * testimonials.length)]);
     }
+  }, []);
 
-    return (
-        <div>
-            <p className="text-gray-600 mb-2 font-semibold">Question {current + 1} of {questions.length}</p>
-            <p className="text-lg text-gray-800 mb-4">{questions[current].q}</p>
-            <div className="p-4 bg-gray-100 rounded-md">
-                <p className="text-gray-500">Answer: <span className="text-gray-800 font-semibold">{questions[current].a}</span></p>
-            </div>
-            <button onClick={() => current < questions.length - 1 ? setCurrent(c => c+1) : setIsFinished(true)} className="mt-4 w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors">
-                {current < questions.length - 1 ? 'Next Question' : 'Finish Sample'}
-            </button>
-        </div>
-    );
-};
-
-const LeadMagnet: React.FC = () => {
-    const [email, setEmail] = useState('');
-    const [isSubmitted, setIsSubmitted] = useState(false);
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        api.captureLead(email);
-        setIsSubmitted(true);
-    };
-
-    if (isSubmitted) {
-        return <p className="text-center font-semibold text-green-700">Thanks! Your cheat sheet is on its way to your inbox.</p>
-    }
-
-    return (
-        <form onSubmit={handleSubmit} className="space-y-3">
-             <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Enter your email address" required className="w-full p-3 border border-gray-300 rounded-lg"/>
-             <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition-colors">
-                Download Now
-             </button>
-        </form>
-    );
-}
-
-const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogout, onGoToDashboard }) => {
   return (
-    <div className="bg-gray-50 min-h-screen">
+    <div className="bg-white min-h-screen font-sans">
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-md sticky top-0 z-40">
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
+            <div className="flex items-center cursor-pointer" onClick={() => onNavigate('/')}>
                 <Logo className="h-12 w-auto" />
             </div>
             <div className="flex items-center gap-2">
+                <button onClick={() => onNavigate('/blog')} className="px-4 py-2 text-sm font-semibold text-gray-700 rounded-md hover:bg-gray-100">Resources</button>
                 {currentUser ? (
                     <>
                         <button onClick={onGoToDashboard} className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700">Dashboard</button>
@@ -98,72 +53,127 @@ const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogo
       </header>
 
       <main>
-        {/* Hero Section */}
-        <div className="relative text-center py-20 px-4 sm:px-6 lg:px-8 bg-white overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-b from-white to-gray-50" aria-hidden="true"></div>
+        {/* === SECTION 1: HERO (ATTENTION) === */}
+        <div className="relative text-center py-20 px-4 sm:px-6 lg:px-8 bg-gray-50 overflow-hidden">
             <div className="relative">
                 <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-gray-900 tracking-tight" style={{fontFamily: 'Montserrat, sans-serif'}}>
-                    Pass Your Certification. <span className="text-blue-600">The First Time.</span>
+                    Stop Memorizing. Start Mastering. <br />
+                    <span className="text-blue-600">The Last Practice Exam You'll Ever Need.</span>
                 </h1>
                 <p className="mt-6 max-w-2xl mx-auto text-lg text-gray-600" style={{fontFamily: 'Poppins, sans-serif'}}>
-                    Stop memorizing old questions. Start understanding the material with our AI-powered practice exams that adapt to you.
+                    Our Dynamic Question Engine builds a new, unique set of realistic questions for every practice session, so you can walk into your test with absolute confidence.
                 </p>
-                <div className="mt-8 flex justify-center gap-4">
+
+                {/* --- Explainer Video --- */}
+                <div className="mt-6 max-w-2xl mx-auto">
+                    <div onClick={() => setIsVideoOpen(true)} className="relative rounded-lg shadow-2xl cursor-pointer group overflow-hidden">
+                        <img src="https://storage.googleapis.com/aistudio-hosting/generative-ai/e8334812-a72f-48ca-9174-89fc1a7a0273/thumbnail.png" alt="Explainer video thumbnail" className="w-full h-auto transition-transform duration-300 group-hover:scale-105" />
+                        <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center">
+                            <div className="w-20 h-20 bg-white/30 backdrop-blur-sm rounded-full flex items-center justify-center transition-transform group-hover:scale-110">
+                                <svg className="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 20 20"><path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"></path></svg>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mt-6 flex justify-center gap-4">
                     <button onClick={onSignup} className="bg-blue-600 text-white font-bold py-3 px-8 rounded-lg text-lg hover:bg-blue-700 transition-transform hover:scale-105">
-                        Start for Free
+                        Start Practicing for Free
                     </button>
                 </div>
             </div>
         </div>
 
-        {/* Features Section */}
-         <div className="py-16 bg-gray-50">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="text-center mb-12">
-                     <h2 className="text-3xl font-extrabold text-gray-900">Why Inspector's Academy?</h2>
-                     <p className="mt-4 text-lg text-gray-600">A smarter way to prepare.</p>
+        {/* === SECTION 2: PROBLEM/SOLUTION (INTEREST) === */}
+        <div className="py-16 bg-white">
+            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                    <div className="p-6 border-2 border-red-200 rounded-lg">
+                        <h3 className="text-2xl font-bold text-red-800 mb-4">The Old Way</h3>
+                        <ul className="space-y-3 text-red-700">
+                            <li className="flex items-start"><span className="text-red-500 font-bold mr-3">✗</span> Relying on outdated PDF dumps & static questions</li>
+                            <li className="flex items-start"><span className="text-red-500 font-bold mr-3">✗</span> Risking failure by just memorizing answers</li>
+                            <li className="flex items-start"><span className="text-red-500 font-bold mr-3">✗</span> Having no feedback on your actual weak spots</li>
+                            <li className="flex items-start"><span className="text-red-500 font-bold mr-3">✗</span> Wasting time and money on expensive re-test fees</li>
+                        </ul>
+                    </div>
+                    <div className="p-6 border-2 border-green-300 rounded-lg bg-green-50">
+                         <h3 className="text-2xl font-bold text-green-800 mb-4">The Smart Way</h3>
+                        <ul className="space-y-3 text-green-900">
+                            <li className="flex items-start"><span className="text-green-500 font-bold mr-3">✓</span> Always-current questions from the latest source material</li>
+                            <li className="flex items-start"><span className="text-green-500 font-bold mr-3">✓</span> Master concepts with a unique quiz every time</li>
+                            <li className="flex items-start"><span className="text-green-500 font-bold mr-3">✓</span> Instantly pinpoint and fix your weaknesses</li>
+                            <li className="flex items-start"><span className="text-green-500 font-bold mr-3">✓</span> Pass with confidence, the first time</li>
+                        </ul>
+                    </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    <div className="text-center p-6 bg-white rounded-lg shadow-md">
-                        <h3 className="text-xl font-bold mb-2">Infinite Questions</h3>
-                        <p className="text-gray-600">Our AI generates unique, exam-style questions every time, so you never see the same quiz twice. Master concepts, not just answers.</p>
+            </div>
+        </div>
+        
+        {/* === SECTION 3: FEATURE BREAKDOWN (DESIRE) === */}
+        <div className="py-16 bg-gray-50">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-16">
+                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+                    <div className="p-4">
+                        <h3 className="text-3xl font-extrabold text-gray-900">Dynamic Question Engine</h3>
+                        <p className="mt-4 text-lg text-gray-600">Master Concepts, Not Just Answers. Our platform constructs a unique quiz for you in real-time, pulling directly from the official code books. This proven method forces you to truly understand the material, preventing the dangerous habit of simply memorizing a static list of old questions.</p>
                     </div>
-                    <div className="text-center p-6 bg-white rounded-lg shadow-md">
-                        <h3 className="text-xl font-bold mb-2">Realistic Simulations</h3>
-                        <p className="text-gray-600">Experience the pressure of the real exam with our timed Open Book, Closed Book, and Full Simulation modes.</p>
+                    <img src="https://storage.googleapis.com/aistudio-hosting/generative-ai/e8334812-a72f-48ca-9174-89fc1a7a0273/feature1.png" alt="Dynamic questions being generated" className="rounded-lg shadow-lg" />
+                 </div>
+                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+                    <img src="https://storage.googleapis.com/aistudio-hosting/generative-ai/e8334812-a72f-48ca-9174-89fc1a7a0273/feature2.png" alt="Timed exam simulation interface" className="rounded-lg shadow-lg lg:order-last" />
+                    <div className="p-4">
+                        <h3 className="text-3xl font-extrabold text-gray-900">Practice Under Real Exam Pressure</h3>
+                        <p className="mt-4 text-lg text-gray-600">Go beyond simple practice. Our timed Simulation Mode replicates the intensity of the real exam, testing your knowledge from memory and your ability to navigate code books under a ticking clock.</p>
                     </div>
-                    <div className="text-center p-6 bg-white rounded-lg shadow-md">
-                        <h3 className="text-xl font-bold mb-2">Performance Analytics</h3>
-                        <p className="text-gray-600">Go beyond just a score. Pinpoint your exact weaknesses by topic and track your improvement over time.</p>
+                 </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+                    <div className="p-4">
+                        <h3 className="text-3xl font-extrabold text-gray-900">Find and Fix Your Weaknesses, Instantly</h3>
+                        <p className="mt-4 text-lg text-gray-600">Stop guessing where you're weak. Our Performance Dashboard instantly analyzes your results, pinpoints your exact knowledge gaps by topic, and lets you launch a targeted quiz to turn those weak spots into strengths.</p>
                     </div>
-                </div>
+                    <img src="https://storage.googleapis.com/aistudio-hosting/generative-ai/e8334812-a72f-48ca-9174-89fc1a7a0273/feature3.png" alt="Performance dashboard showing weakness analysis" className="rounded-lg shadow-lg" />
+                 </div>
             </div>
         </div>
 
-        {/* Sample Quiz & Lead Magnet */}
-        <div className="bg-white py-16">
-            <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
-                 <div className="p-8 border rounded-lg shadow-lg">
-                    <h2 className="text-2xl font-bold text-gray-900 mb-4">Try a 3-Question Sample</h2>
-                    <p className="text-gray-600 mb-6">Get a feel for the quality of our AI-generated questions. No signup required.</p>
-                    <FreeSampleQuiz onSignup={onSignup} />
-                 </div>
-                 <div className="p-8 bg-indigo-50 border border-indigo-200 rounded-lg shadow-lg">
-                     <h2 className="text-2xl font-bold text-indigo-900 mb-4">Free API 510 Cheat Sheet</h2>
-                     <p className="text-indigo-800 mb-6">Get our comprehensive guide to key formulas and code references delivered to your inbox.</p>
-                     <LeadMagnet />
+        {/* === SECTION 4: SOCIAL PROOF (DESIRE) === */}
+        {testimonial && (
+            <div className="bg-white py-16">
+                 <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+                    <img src="https://storage.googleapis.com/aistudio-hosting/generative-ai/e8334812-a72f-48ca-9174-89fc1a7a0273/testimonial_avatar.png" alt="User testimonial photo" className="w-20 h-20 rounded-full mx-auto mb-4" />
+                    <blockquote className="text-xl text-gray-700 italic">
+                        "{testimonial.quote}"
+                    </blockquote>
+                    <footer className="mt-4 font-bold text-gray-900">- {testimonial.author}</footer>
                  </div>
             </div>
+        )}
+        
+        {/* === SECTION 5: PRICING & CTA (ACTION) === */}
+        <div className="bg-gray-50 py-16">
+             <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+                 <div className="text-center mb-12">
+                     <h2 className="text-3xl font-extrabold text-gray-900">Ready to Pass With Confidence?</h2>
+                     <p className="mt-4 text-lg text-gray-600">Start for free today. Upgrade when you're ready for unlimited access.</p>
+                 </div>
+                <PricingTiers user={{ subscriptionTier: 'STARTER' } as User} onUpgrade={onSignup} />
+             </div>
         </div>
+
       </main>
 
       {/* Footer */}
       <footer className="bg-gray-800 text-white">
-        <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 text-center text-sm">
-            <p>&copy; {new Date().getFullYear()} Inspector's Academy. All rights reserved.</p>
-            <p className="mt-2 text-gray-400">This is a demo application for educational purposes.</p>
+        <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+            <p className="text-sm">&copy; {new Date().getFullYear()} Inspector's Academy. All rights reserved.</p>
+            <div className="text-sm text-gray-400">
+                <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('/blog'); }} className="hover:text-white">Resources</a>
+            </div>
         </div>
       </footer>
+
+      {isVideoOpen && <VideoLightbox videoSrc="https://storage.googleapis.com/aistudio-hosting/generative-ai/e8334812-a72f-48ca-9174-89fc1a7a0273/explainer_video.mp4" onClose={() => setIsVideoOpen(false)} />}
     </div>
   );
 };
