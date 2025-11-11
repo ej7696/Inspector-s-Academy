@@ -25,6 +25,15 @@ const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogo
     }
   }, []);
 
+  const certifications = [
+    "API 510 - Pressure Vessel Inspector",
+    "API 570 - Piping Inspector",
+    "API 653 - Aboveground Storage Tank Inspector",
+    "CWI - Certified Welding Inspector",
+    "API 1169 - Pipeline Inspector",
+    "SIFE / SIRE / SIEE"
+  ];
+
   return (
     <div className="bg-white min-h-screen font-sans">
       {/* Header */}
@@ -66,8 +75,15 @@ const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogo
 
                 {/* --- Explainer Video --- */}
                 <div className="mt-6 max-w-2xl mx-auto">
-                    <div onClick={() => setIsVideoOpen(true)} className="relative rounded-lg shadow-2xl cursor-pointer group overflow-hidden">
-                        <img src="https://storage.googleapis.com/aistudio-hosting/generative-ai/e8334812-a72f-48ca-9174-89fc1a7a0273/thumbnail.png" alt="Explainer video thumbnail" className="w-full h-auto transition-transform duration-300 group-hover:scale-105" />
+                    <div 
+                        onClick={() => setIsVideoOpen(true)} 
+                        className="relative rounded-lg shadow-2xl cursor-pointer group overflow-hidden aspect-video"
+                    >
+                        <img 
+                            src="https://storage.googleapis.com/aistudio-hosting/generative-ai/e8334812-a72f-48ca-9174-89fc1a7a0273/thumbnail.png" 
+                            alt="Explainer video thumbnail" 
+                            className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
+                        />
                         <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center">
                             <div className="w-20 h-20 bg-white/30 backdrop-blur-sm rounded-full flex items-center justify-center transition-transform group-hover:scale-110">
                                 <svg className="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 20 20"><path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"></path></svg>
@@ -80,6 +96,22 @@ const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogo
                     <button onClick={onSignup} className="bg-blue-600 text-white font-bold py-3 px-8 rounded-lg text-lg hover:bg-blue-700 transition-transform hover:scale-105">
                         Start Practicing for Free
                     </button>
+                </div>
+            </div>
+        </div>
+
+        {/* === NEW SECTION: CERTIFICATION SHOWCASE === */}
+        <div className="py-8 bg-slate-50 border-y">
+            <div className="max-w-5xl mx-auto px-4 text-center">
+                <h2 className="text-lg font-semibold text-gray-700" style={{fontFamily: 'Poppins, sans-serif'}}>
+                    Comprehensive Practice for the Certifications That Define Your Career
+                </h2>
+                <div className="mt-4 flex flex-wrap justify-center gap-3">
+                    {certifications.map(cert => (
+                        <span key={cert} className="bg-slate-200 text-slate-800 text-sm font-bold px-4 py-2 rounded-full">
+                            {cert}
+                        </span>
+                    ))}
                 </div>
             </div>
         </div>

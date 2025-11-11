@@ -95,10 +95,7 @@ const App: React.FC = () => {
         postLoginAction();
         setPostLoginAction(null);
     } else {
-        // If logging in from a public page, go home, otherwise stay.
-        if (window.location.pathname !== '/') {
-             window.history.pushState({}, '', '/');
-        }
+        // After login, always go to the main app view
         setCurrentView('home');
     }
   };
@@ -115,10 +112,6 @@ const App: React.FC = () => {
       api.logout();
       setCurrentUser(null);
       setOriginalUser(null);
-      // This will automatically render the PublicWebsite
-      if (window.location.pathname !== '/') {
-        window.history.pushState({}, '', '/');
-      }
       resetQuizState();
     }
   };
@@ -395,6 +388,8 @@ const App: React.FC = () => {
     setCurrentUser(updatedUser);
     setCurrentView('home');
   };
+  
+  // --- Render Logic ---
 
   const renderLoggedInContent = () => {
     switch (currentView) {
@@ -418,7 +413,7 @@ const App: React.FC = () => {
     const path = window.location.pathname;
     if (path.startsWith('/blog/')) {
         const slug = path.split('/blog/')[1];
-        return <ArticlePage slug={slug} onNavigate={() => window.history.pushState({}, '', '/blog')} />;
+        return <ArticlePage slug={slug} onNavigate={(newPath) => window.history.pushState({}, '', newPath)} />;
     }
     if (path === '/blog') {
         return <BlogPage onNavigateHome={() => window.history.pushState({}, '', '/')} />;
@@ -430,15 +425,12 @@ const App: React.FC = () => {
     // Default to the main landing page
     return (
         <PublicWebsite 
-            currentUser={null}
+            currentUser={currentUser}
             onLogin={() => setAuthModal('login')}
             onSignup={() => setAuthModal('signup')}
-            onLogout={handleLogout} // for completeness
-            onGoToDashboard={() => {
-              setAuthModal('login');
-              setPostLoginAction(() => () => setCurrentView('home'));
-            }}
-            onNavigate={(path) => window.history.pushState({}, '', path)}
+            onLogout={handleLogout} 
+            onGoToDashboard={() => setCurrentView('home')}
+            onNavigate={(newPath) => window.history.pushState({}, '', newPath)}
         />
     );
   };
