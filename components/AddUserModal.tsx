@@ -5,7 +5,7 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   // Fix: Correct the Omit type to not expect fields that are auto-generated or not set in this form.
-  onAddUser: (newUser: Omit<User, 'id' | 'subscriptionTier' | 'unlockedExams' | 'history' | 'inProgressQuiz' | 'createdAt' | 'lastActive' | 'monthlyQuestionRemaining' | 'monthlyExamUsage' | 'monthlyResetDate' | 'permissions' | 'subscriptionExpiresAt' | 'isSuspended'>) => Promise<void>;
+  onAddUser: (newUser: Omit<User, 'id' | 'subscriptionTier' | 'unlockedExams' | 'history' | 'inProgressQuiz' | 'createdAt' | 'lastActive' | 'monthlyQuestionRemaining' | 'monthlyExamUsage' | 'monthlyResetDate' | 'permissions' | 'subscriptionExpiresAt' | 'isSuspended' | 'paidUnlockSlots' | 'isNewUser' | 'referralCode' | 'accountCredit' | 'mustChangePassword'>) => Promise<void>;
 }
 
 const AddUserModal: React.FC<Props> = ({ isOpen, onClose, onAddUser }) => {

@@ -179,13 +179,14 @@ class ApiService {
     return user;
   }
 
-  adminResetPassword(userId: string): string {
-    const tempPassword = `Reset-${Math.random().toString(36).substring(2, 10)}`;
+  adminSetPassword(userId: string, newPassword: string): void {
+    if (newPassword.length < 6) {
+      throw new Error("Password must be at least 6 characters.");
+    }
     this.updateUser(userId, {
-      password: tempPassword,
+      password: newPassword,
       mustChangePassword: true,
     });
-    return tempPassword;
   }
 
   exportAllUsersAsCSV() {
