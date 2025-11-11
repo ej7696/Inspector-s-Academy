@@ -80,7 +80,7 @@ const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogo
                         className="relative rounded-lg shadow-2xl cursor-pointer group overflow-hidden aspect-video"
                     >
                         <img 
-                            src="https://storage.googleapis.com/aistudio-hosting/generative-ai/e8334812-a72f-48ca-9174-89fc1a7a0273/thumbnail.png" 
+                            src="https://i.ibb.co/wJ3d6V2/thumbnail.png" 
                             alt="Explainer video thumbnail" 
                             className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
                         />
@@ -150,10 +150,10 @@ const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogo
                         <h3 className="text-3xl font-extrabold text-gray-900">Dynamic Question Engine</h3>
                         <p className="mt-4 text-lg text-gray-600">Master Concepts, Not Just Answers. Our platform constructs a unique quiz for you in real-time, pulling directly from the official code books. This proven method forces you to truly understand the material, preventing the dangerous habit of simply memorizing a static list of old questions.</p>
                     </div>
-                    <img src="https://storage.googleapis.com/aistudio-hosting/generative-ai/e8334812-a72f-48ca-9174-89fc1a7a0273/feature1.png" alt="Dynamic questions being generated" className="rounded-lg shadow-lg" />
+                    <img src="https://i.ibb.co/3k0bYhX/feature1.png" alt="Dynamic questions being generated" className="rounded-lg shadow-lg" />
                  </div>
                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
-                    <img src="https://storage.googleapis.com/aistudio-hosting/generative-ai/e8334812-a72f-48ca-9174-89fc1a7a0273/feature2.png" alt="Timed exam simulation interface" className="rounded-lg shadow-lg lg:order-last" />
+                    <img src="https://i.ibb.co/RSCt8s3/feature2.png" alt="Timed exam simulation interface" className="rounded-lg shadow-lg lg:order-last" />
                     <div className="p-4">
                         <h3 className="text-3xl font-extrabold text-gray-900">Practice Under Real Exam Pressure</h3>
                         <p className="mt-4 text-lg text-gray-600">Go beyond simple practice. Our timed Simulation Mode replicates the intensity of the real exam, testing your knowledge from memory and your ability to navigate code books under a ticking clock.</p>
@@ -164,7 +164,7 @@ const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogo
                         <h3 className="text-3xl font-extrabold text-gray-900">Find and Fix Your Weaknesses, Instantly</h3>
                         <p className="mt-4 text-lg text-gray-600">Stop guessing where you're weak. Our Performance Dashboard instantly analyzes your results, pinpoints your exact knowledge gaps by topic, and lets you launch a targeted quiz to turn those weak spots into strengths.</p>
                     </div>
-                    <img src="https://storage.googleapis.com/aistudio-hosting/generative-ai/e8334812-a72f-48ca-9174-89fc1a7a0273/feature3.png" alt="Performance dashboard showing weakness analysis" className="rounded-lg shadow-lg" />
+                    <img src="https://i.ibb.co/b3y5k2H/feature3.png" alt="Performance dashboard showing weakness analysis" className="rounded-lg shadow-lg" />
                  </div>
             </div>
         </div>
@@ -173,7 +173,7 @@ const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogo
         {testimonial && (
             <div className="bg-white py-16">
                  <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-                    <img src="https://storage.googleapis.com/aistudio-hosting/generative-ai/e8334812-a72f-48ca-9174-89fc1a7a0273/testimonial_avatar.png" alt="User testimonial photo" className="w-20 h-20 rounded-full mx-auto mb-4" />
+                    <img src="https://i.ibb.co/Q8QvV9w/testimonial-avatar.png" alt="User testimonial photo" className="w-20 h-20 rounded-full mx-auto mb-4" />
                     <blockquote className="text-xl text-gray-700 italic">
                         "{testimonial.quote}"
                     </blockquote>

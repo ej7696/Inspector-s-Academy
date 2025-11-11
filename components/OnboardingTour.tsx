@@ -18,7 +18,7 @@ const steps = [
   },
   {
     title: "Step 2: Start a Sample Quiz",
-    content: "Your plan includes a 2-question sample for each certification to give you a feel for our AI-generated questions. Use the 'Quiz Settings' to begin."
+    content: "Your plan includes a 2-question sample for each certification to give you a feel for our Dynamic Question Engine. Use the 'Quiz Settings' to begin."
   },
   {
     title: "Ready for Full Access?",

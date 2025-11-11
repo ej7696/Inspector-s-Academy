@@ -33,8 +33,6 @@ const ForceChangePassword: React.FC<Props> = ({ user, onPasswordChanged }) => {
         password: newPassword,
         mustChangePassword: false,
       });
-      // Simulate a re-login with the new password to refresh the user state if needed
-      // In a real app with tokens, you'd get a new token here.
       onPasswordChanged();
     } catch (err: any) {
       setError(err.message || "Failed to update password.");
