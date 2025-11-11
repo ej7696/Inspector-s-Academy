@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { User, Question, ActivityEvent, Exam, Announcement, SubscriptionTierDetails, Role, QuizResult, InProgressQuizState, InProgressAnswer, UserAnswer, SubscriptionTier } from '../types';
+import { User, Question, ActivityEvent, Exam, Announcement, SubscriptionTierDetails, Role, QuizResult, InProgressQuizState, InProgressAnswer, UserAnswer, SubscriptionTier, Testimonial } from '../types';
 import { seedData } from './seedData';
 import { examSourceData } from './examData';
 
@@ -12,6 +12,8 @@ const LOCAL_STORAGE_KEYS = {
   ACTIVITY: 'inspectors_academy_activity',
   LOGGED_IN_USER: 'inspectors_academy_logged_in_user',
   SUBSCRIPTION_TIERS: 'inspectors_academy_subscription_tiers',
+  TESTIMONIALS: 'inspectors_academy_testimonials',
+  LEADS: 'inspectors_academy_leads',
 };
 
 class ApiService {
@@ -40,6 +42,12 @@ class ApiService {
     }
      if (!localStorage.getItem(LOCAL_STORAGE_KEYS.SUBSCRIPTION_TIERS)) {
       localStorage.setItem(LOCAL_STORAGE_KEYS.SUBSCRIPTION_TIERS, JSON.stringify(seedData.subscriptionTiers));
+    }
+    if (!localStorage.getItem(LOCAL_STORAGE_KEYS.TESTIMONIALS)) {
+      localStorage.setItem(LOCAL_STORAGE_KEYS.TESTIMONIALS, JSON.stringify(seedData.testimonials));
+    }
+     if (!localStorage.getItem(LOCAL_STORAGE_KEYS.LEADS)) {
+      localStorage.setItem(LOCAL_STORAGE_KEYS.LEADS, JSON.stringify([]));
     }
   }
 
@@ -97,6 +105,19 @@ class ApiService {
     this.logActivity('login', 'logged in.', user.id, user.email);
     return user;
   }
+  
+  async registerUser(fullName: string, email: string, password: string): Promise<User> {
+    const users = this.getAllUsers();
+    if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
+        throw new Error('An account with this email already exists.');
+    }
+    const newUser = this.addUser({ fullName, email, password, role: 'USER' });
+    
+    // Automatically log in the new user
+    localStorage.setItem(LOCAL_STORAGE_KEYS.LOGGED_IN_USER, newUser.id);
+    this.logActivity('user_signup', 'created a new account.', newUser.id, newUser.email);
+    return newUser;
+  }
 
   logout() {
     localStorage.removeItem(LOCAL_STORAGE_KEYS.LOGGED_IN_USER);
@@ -126,19 +147,10 @@ class ApiService {
     });
     if (!userToUpdate) throw new Error('User not found');
     localStorage.setItem(LOCAL_STORAGE_KEYS.USERS, JSON.stringify(users));
-
-    // If updating the currently logged-in user, also update their session marker
-    // unless it's a silent background update.
-    const loggedInId = localStorage.getItem(LOCAL_STORAGE_KEYS.LOGGED_IN_USER);
-    if (!silent && loggedInId === userId) {
-        // This part is tricky in a localStorage setup. Re-serializing the user isn't ideal.
-        // The App component should handle updating its own state.
-    }
-
     return userToUpdate;
   }
 
-  addUser(newUser: Omit<User, 'id' | 'subscriptionTier' | 'unlockedExams' | 'history' | 'inProgressQuiz' | 'createdAt' | 'lastActive' | 'monthlyQuestionRemaining' | 'monthlyExamUsage' | 'monthlyResetDate' | 'permissions' | 'subscriptionExpiresAt' | 'isSuspended' | 'paidUnlockSlots'>): User {
+  addUser(newUser: Omit<User, 'id' | 'subscriptionTier' | 'unlockedExams' | 'history' | 'inProgressQuiz' | 'createdAt' | 'lastActive' | 'monthlyQuestionRemaining' | 'monthlyExamUsage' | 'monthlyResetDate' | 'permissions' | 'subscriptionExpiresAt' | 'isSuspended' | 'paidUnlockSlots' | 'isNewUser' | 'referralCode' | 'accountCredit'> & { role: Role }): User {
     const users = this.getAllUsers();
     if (users.some(u => u.email.toLowerCase() === newUser.email.toLowerCase())) {
         throw new Error('A user with this email already exists.');
@@ -154,6 +166,9 @@ class ApiService {
       history: [],
       createdAt: now,
       lastActive: now,
+      isNewUser: true,
+      referralCode: `REF${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+      accountCredit: 0,
       monthlyQuestionRemaining: 15,
       monthlyExamUsage: {},
       monthlyResetDate: now + 30 * 24 * 60 * 60 * 1000,
@@ -182,6 +197,32 @@ class ApiService {
     link.click();
     document.body.removeChild(link);
   }
+
+  // --- Marketing & Sales ---
+  async captureLead(email: string): Promise<void> {
+    const leads: string[] = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.LEADS) || '[]');
+    if (!leads.includes(email)) {
+        leads.push(email);
+        localStorage.setItem(LOCAL_STORAGE_KEYS.LEADS, JSON.stringify(leads));
+    }
+    console.log(`Lead captured: ${email}`);
+  }
+
+  getTestimonials(): Testimonial[] {
+      return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.TESTIMONIALS) || '[]');
+  }
+  
+  addTestimonial(author: string, quote: string): void {
+      const testimonials = this.getTestimonials();
+      const newTestimonial: Testimonial = {
+          id: `test-${Date.now()}`,
+          author,
+          quote
+      };
+      testimonials.push(newTestimonial);
+      localStorage.setItem(LOCAL_STORAGE_KEYS.TESTIMONIALS, JSON.stringify(testimonials));
+  }
+
 
   // --- Exams ---
   getExams(): Exam[] {
@@ -298,6 +339,8 @@ class ApiService {
     if (!examData) {
       throw new Error("Exam data not found.");
     }
+    
+    this.logActivity('quiz_start', `started a ${numQuestions}-question quiz for ${examName}.`, this.getCurrentUser()!.id, this.getCurrentUser()!.email);
     
     const { bodyOfKnowledge, effectivitySheet } = examData;
 

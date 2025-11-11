@@ -69,7 +69,7 @@ export interface User {
   phoneNumber?: string;
   password?: string; // Should be handled securely on a real backend
   subscriptionTier: SubscriptionTier;
-  paidUnlockSlots: number; // New field for à la carte model
+  paidUnlockSlots: number;
   subscriptionExpiresAt?: number | null;
   unlockedExams: string[];
   history: QuizResult[];
@@ -79,6 +79,10 @@ export interface User {
   createdAt: number;
   lastActive: number;
   isSuspended?: boolean;
+  // B2C Growth Features
+  isNewUser?: boolean;
+  referralCode?: string;
+  accountCredit?: number;
   // Fields for Monthly Question Bank for STARTER users
   monthlyQuestionRemaining: number | null;
   monthlyExamUsage: { [examName: string]: number } | null;
@@ -96,7 +100,15 @@ export interface QuizResult {
   userAnswers: UserAnswer[];
 }
 
-export type ActivityEventType = 'login' | 'upgrade' | 'unlock' | 'one_time_unlock' | 'quiz_complete';
+export type ActivityEventType = 
+  | 'login' 
+  | 'user_signup'
+  | 'upgrade' 
+  | 'unlock' 
+  | 'one_time_unlock' 
+  | 'quiz_complete'
+  | 'quiz_start'
+  | 'view_paywall';
 
 export interface ActivityEvent {
   id: string;
@@ -131,4 +143,10 @@ export interface SubscriptionTierDetails {
   cta?: string;
   isPopular?: boolean;
   isDeemphasized?: boolean;
+}
+
+export interface Testimonial {
+    id: string;
+    author: string;
+    quote: string;
 }

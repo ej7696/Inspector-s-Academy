@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { SubscriptionTier, User, SubscriptionTierDetails } from '../types';
+import { SubscriptionTier, User, SubscriptionTierDetails, Testimonial } from '../types';
 import api from '../services/apiService';
 
 interface Props {
@@ -10,22 +10,42 @@ interface Props {
 
 const Paywall: React.FC<Props> = ({ user, onUpgrade, onCancel }) => {
   const [tiers, setTiers] = useState<SubscriptionTierDetails[]>([]);
+  const [testimonial, setTestimonial] = useState<Testimonial | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const fetchTiers = async () => {
+    const fetchData = async () => {
       try {
-        const tierData = await api.getSubscriptionTiers();
+        const [tierData, testimonialsData] = await Promise.all([
+          api.getSubscriptionTiers(),
+          api.getTestimonials()
+        ]);
         setTiers(tierData);
+        if (testimonialsData.length > 0) {
+            setTestimonial(testimonialsData[Math.floor(Math.random() * testimonialsData.length)]);
+        }
       } catch (error) {
-        console.error("Failed to fetch subscription tiers:", error);
-        // Optionally set an error state here
+        console.error("Failed to fetch paywall data:", error);
       } finally {
         setIsLoading(false);
       }
     };
-    fetchTiers();
+    fetchData();
   }, []);
+  
+  // Listen for the Escape key to close the modal
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+            onCancel();
+        }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onCancel]);
+
 
   const getContinueText = () => {
     if (user.subscriptionTier === 'STARTER') {
@@ -71,7 +91,10 @@ const Paywall: React.FC<Props> = ({ user, onUpgrade, onCancel }) => {
     }
     
     return (
-       <div className="bg-white p-6 md:p-8 rounded-2xl shadow-xl w-full max-w-md md:max-w-5xl max-h-[90vh] overflow-y-auto transform transition-all animate-fade-in-up">
+       <div 
+        onClick={(e) => e.stopPropagation()} // Prevent clicks inside from closing the modal
+        className="bg-white p-6 md:p-8 rounded-2xl shadow-xl w-full max-w-md md:max-w-5xl max-h-[90vh] overflow-y-auto transform transition-all animate-fade-in-up"
+       >
         <h2 className="text-3xl font-bold text-gray-800 mb-3 text-center">Your Certification Toolkit</h2>
         <p className="text-gray-600 mb-8 text-center max-w-2xl mx-auto">
           Select the right plan to master the material, practice under pressure, and pass your exam with confidence.
@@ -127,15 +150,17 @@ const Paywall: React.FC<Props> = ({ user, onUpgrade, onCancel }) => {
           })}
         </div>
         
-        <div className="mt-10 text-center border-t pt-8">
-            <h3 className="text-xl font-bold text-gray-700">Trusted by Professionals</h3>
-            <blockquote className="max-w-2xl mx-auto mt-4 text-gray-600 italic">
-                <p>"The simulation mode was a game-changer for my API 510 exam. I walked in feeling prepared and confident, and passed on the first try."</p>
-                <footer className="mt-2 text-sm font-semibold text-gray-800 not-italic">
-                - John D., Certified Pressure Vessel Inspector
-                </footer>
-            </blockquote>
-        </div>
+        {testimonial && (
+            <div className="mt-10 text-center border-t pt-8">
+                <h3 className="text-xl font-bold text-gray-700">Trusted by Professionals</h3>
+                <blockquote className="max-w-2xl mx-auto mt-4 text-gray-600 italic">
+                    <p>"{testimonial.quote}"</p>
+                    <footer className="mt-2 text-sm font-semibold text-gray-800 not-italic">
+                    - {testimonial.author}
+                    </footer>
+                </blockquote>
+            </div>
+        )}
 
         <div className="mt-8 text-center">
             <p className="text-xs text-gray-500 font-semibold tracking-widest">PREPARE FOR CERTIFICATIONS FROM:</p>
@@ -160,7 +185,10 @@ const Paywall: React.FC<Props> = ({ user, onUpgrade, onCancel }) => {
 
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+    <div 
+        onClick={onCancel}
+        className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4"
+    >
       {renderContent()}
     </div>
   );

@@ -1,4 +1,4 @@
-import { User, Announcement, SubscriptionTierDetails, Role } from '../types';
+import { User, Announcement, SubscriptionTierDetails, Role, Testimonial } from '../types';
 
 // Password for all demo accounts is 'password123' for simplicity
 // except for admin ('admin123') and subadmin ('subadmin123')
@@ -20,11 +20,11 @@ export const seedData = {
       unlockedExams: [],
       history: [],
       role: 'ADMIN',
-      createdAt: now,
+      createdAt: now - THIRTY_DAYS_IN_MS * 2, // veteran user
       lastActive: now,
-      monthlyQuestionRemaining: null,
-      monthlyExamUsage: null,
-      monthlyResetDate: null,
+      isNewUser: false,
+      referralCode: 'ADMINPRO123',
+      accountCredit: 100,
     },
     {
       id: 'user-2',
@@ -42,11 +42,9 @@ export const seedData = {
         canManageExams: false, canAccessPerformanceAnalytics: false, canViewBillingSummary: false,
         canManageSubscriptions: false, canViewActivityLogs: true, canSuspendUsers: false
       },
-      createdAt: now,
+      createdAt: now - THIRTY_DAYS_IN_MS,
       lastActive: now,
-      monthlyQuestionRemaining: null,
-      monthlyExamUsage: null,
-      monthlyResetDate: null,
+      isNewUser: false,
     },
     {
       id: 'user-3',
@@ -59,8 +57,11 @@ export const seedData = {
       unlockedExams: [],
       history: [],
       role: 'USER',
-      createdAt: now,
+      createdAt: now - (24 * 60 * 60 * 1000), // signed up yesterday
       lastActive: now,
+      isNewUser: true, // For onboarding tour
+      referralCode: 'CADETNEWBIE',
+      accountCredit: 0,
       monthlyQuestionRemaining: 15,
       monthlyExamUsage: {},
       monthlyResetDate: now + THIRTY_DAYS_IN_MS,
@@ -73,14 +74,12 @@ export const seedData = {
       subscriptionTier: 'PROFESSIONAL',
       paidUnlockSlots: 1,
       subscriptionExpiresAt: now + FOUR_MONTHS_IN_MS,
-      unlockedExams: [],
+      unlockedExams: ["API 510 - Pressure Vessel Inspector"],
       history: [],
       role: 'USER',
-      createdAt: now,
+      createdAt: now - THIRTY_DAYS_IN_MS * 3,
       lastActive: now,
-      monthlyQuestionRemaining: null,
-      monthlyExamUsage: null,
-      monthlyResetDate: null,
+      isNewUser: false,
     },
     {
       id: 'user-5',
@@ -90,14 +89,12 @@ export const seedData = {
       subscriptionTier: 'SPECIALIST',
       paidUnlockSlots: 2,
       subscriptionExpiresAt: now + FOUR_MONTHS_IN_MS,
-      unlockedExams: [],
+      unlockedExams: ["API 570 - Piping Inspector", "API 653 - Aboveground Storage Tank Inspector"],
       history: [],
       role: 'USER',
-      createdAt: now,
+      createdAt: now - THIRTY_DAYS_IN_MS * 6,
       lastActive: now,
-      monthlyQuestionRemaining: null,
-      monthlyExamUsage: null,
-      monthlyResetDate: null,
+      isNewUser: false,
     },
   ] as User[],
   announcements: [
@@ -146,4 +143,16 @@ export const seedData = {
       isPopular: true,
     },
   ] as SubscriptionTierDetails[],
+  testimonials: [
+      {
+        id: 'test-1',
+        author: 'John D., Certified API 510',
+        quote: "The simulation mode was a game-changer for my API 510 exam. I walked in feeling prepared and confident, and passed on the first try."
+      },
+      {
+        id: 'test-2',
+        author: 'Maria S., CWI',
+        quote: "The AI-generated questions are incredibly realistic. It's like having an infinite supply of practice exams. I never saw the same question twice."
+      }
+  ] as Testimonial[],
 };

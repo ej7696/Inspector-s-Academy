@@ -81,7 +81,7 @@ const ExamScreen: React.FC<Props> = ({
     if (autoSaveTimeout.current) {
         clearTimeout(autoSaveTimeout.current);
     }
-    autoSaveTimeout.current = setTimeout(() => {
+    autoSaveTimeout.current = window.setTimeout(() => {
         onAutoSave(answers, timeLeft);
     }, 5000); // Save every 5 seconds after the last change
 

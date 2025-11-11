@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { User, InProgressQuizState, Exam, Announcement } from '../types';
 import api from '../services/apiService';
 import ProgressRing from './ProgressRing';
+import WelcomeOfferBanner from './WelcomeOfferBanner';
 
 interface Props {
   user: User;
@@ -105,6 +106,8 @@ const HomePage: React.FC<Props> = ({
   };
 
   const isSubscriptionActive = user.subscriptionTier !== 'STARTER' && user.subscriptionExpiresAt ? Date.now() < user.subscriptionExpiresAt : false;
+  
+  const isWithinWelcomeOffer = user.subscriptionTier === 'STARTER' && (Date.now() - user.createdAt < 48 * 60 * 60 * 1000);
 
 
   if (isLoading) {
@@ -132,6 +135,7 @@ const HomePage: React.FC<Props> = ({
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6">
+        {isWithinWelcomeOffer && <WelcomeOfferBanner onUpgrade={onUpgrade} />}
         <div className="flex items-center gap-4 mb-6">
             {announcements.length > 0 ? (
                 <div className="flex-grow bg-indigo-600 text-white p-4 rounded-lg text-center shadow-lg">

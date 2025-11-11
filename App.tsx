@@ -15,13 +15,16 @@ import AdminDashboard from './components/AdminDashboard';
 import Paywall from './components/Paywall';
 import InfoDialog from './components/InfoDialog';
 import ExamUnlockSelector from './components/ExamUnlockSelector';
+import PublicWebsite from './components/PublicWebsite';
+import OnboardingTour from './components/OnboardingTour';
 
 type View = 'login' | 'home' | 'select_mode' | 'instructions' | 'quiz' | 'review' | 'score' | 'dashboard' | 'profile' | 'admin' | 'paywall' | 'select_unlocked_exams';
+type AuthModal = 'login' | 'signup' | null;
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [originalUser, setOriginalUser] = useState<User | null>(null);
-  const [currentView, setCurrentView] = useState<View>('login');
+  const [currentView, setCurrentView] = useState<View>('home');
   const [isLoading, setIsLoading] = useState(true);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [errorInfo, setErrorInfo] = useState<{title: string, message: string} | null>(null);
@@ -38,8 +41,11 @@ const App: React.FC = () => {
   const [startTime, setStartTime] = useState(0);
   const [timeRemaining, setTimeRemaining] = useState(0);
   
-  // Purchase Flow State
+  // B2C Growth State
   const [examToPurchase, setExamToPurchase] = useState<{name: string, price: string} | null>(null);
+  const [authModal, setAuthModal] = useState<AuthModal>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [postLoginAction, setPostLoginAction] = useState<(() => void) | null>(null);
 
   const [followUpAnswer, setFollowUpAnswer] = useState('');
   const [isFollowUpLoading, setIsFollowUpLoading] = useState(false);
@@ -49,7 +55,6 @@ const App: React.FC = () => {
     const user = api.getCurrentUser();
     if (user) {
       setCurrentUser(user);
-      setCurrentView('home');
     }
     setIsLoading(false);
   }, []);
@@ -72,7 +77,18 @@ const App: React.FC = () => {
 
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);
-    setCurrentView('home');
+    setAuthModal(null);
+    
+    if (user.isNewUser) {
+        setShowOnboarding(true);
+    }
+
+    if (postLoginAction) {
+        postLoginAction();
+        setPostLoginAction(null);
+    } else {
+        setCurrentView('home');
+    }
   };
 
   const handleLogout = () => {
@@ -87,7 +103,7 @@ const App: React.FC = () => {
       api.logout();
       setCurrentUser(null);
       setOriginalUser(null);
-      setCurrentView('login');
+      // This will automatically render the PublicWebsite
       resetQuizState();
     }
   };
@@ -114,20 +130,12 @@ const App: React.FC = () => {
 
     // Enforce lock status for paid tiers
     if (currentUser && (currentUser.subscriptionTier === 'PROFESSIONAL' || currentUser.subscriptionTier === 'SPECIALIST')) {
-      // Check 1: Is subscription active?
       if (!currentUser.subscriptionExpiresAt || Date.now() > currentUser.subscriptionExpiresAt) {
-        setErrorInfo({
-          title: 'Subscription Expired',
-          message: 'Your subscription has expired. Please renew your plan to continue practicing.'
-        });
+        setErrorInfo({ title: 'Subscription Expired', message: 'Your subscription has expired. Please renew your plan to continue practicing.' });
         return;
       }
-      // Check 2: Is the exam unlocked?
       if (!currentUser.unlockedExams.includes(examName)) {
-        setErrorInfo({
-          title: 'Exam Locked',
-          message: `This exam is not unlocked on your current plan. Please select an unlocked exam.`
-        });
+        setErrorInfo({ title: 'Exam Locked', message: `This exam is not unlocked on your current plan. Please select an unlocked exam.` });
         return;
       }
     }
@@ -145,26 +153,21 @@ const App: React.FC = () => {
 
   const generateAndStartQuiz = async (settings: QuizSettings) => {
     if (currentUser?.subscriptionTier === 'STARTER') {
-      // Refresh user data to ensure limits are up to date
       const refreshedUser = api.checkAndResetMonthlyLimits(currentUser);
       if (refreshedUser !== currentUser) {
         setCurrentUser(refreshedUser);
       }
-      
-      // Perform final check before generation (belt-and-suspenders approach)
       const monthlyRemaining = refreshedUser.monthlyQuestionRemaining || 0;
       if (settings.numQuestions > monthlyRemaining) {
         setErrorInfo({ title: 'Question Limit Reached', message: `You only have ${monthlyRemaining} questions remaining this month. Please select a smaller quiz size or upgrade your plan.`});
         return;
       }
-
       const usageForExam = refreshedUser.monthlyExamUsage?.[settings.examName] || 0;
       const perExamLimit = 2;
       if (usageForExam + settings.numQuestions > perExamLimit) {
          setErrorInfo({ title: 'Question Limit Exceeded', message: `You can only take ${perExamLimit - usageForExam} more question(s) for the "${settings.examName}" exam this month.`});
         return;
       }
-      
       const updatedUser = api.recordStarterUsage(currentUser.id, settings.examName, settings.numQuestions);
       setCurrentUser(updatedUser);
     }
@@ -184,10 +187,7 @@ const App: React.FC = () => {
       setTimeRemaining(settings.isTimed ? settings.numQuestions * 90 : 0);
       setCurrentView('quiz');
     } catch (error: any) {
-      setErrorInfo({
-          title: 'Quiz Generation Failed',
-          message: error.message || 'An unknown error occurred while generating questions. The model might be unavailable. Please try again.'
-      });
+      setErrorInfo({ title: 'Quiz Generation Failed', message: error.message || 'An unknown error occurred while generating questions. The model might be unavailable. Please try again.' });
     } finally {
       setIsLoading(false);
       setLoadingMessage('');
@@ -202,36 +202,19 @@ const App: React.FC = () => {
       setStartTime(progress.startTime);
       setTimeRemaining(progress.timeRemaining);
       setIsSimulationIntermission(progress.isSimulationIntermission);
-      setQuizPart(progress.isSimulationIntermission ? 'closed' : 'open'); // Assumption: if intermission is true, they are about to start open book part. Better logic would be to save quizPart.
+      setQuizPart(progress.isSimulationIntermission ? 'closed' : 'open');
       setCurrentView('quiz');
   };
 
   const handleAutoSave = (answers: InProgressAnswer[], time: number) => {
     if (!currentUser || !quizSettings) return;
-    const progress: InProgressQuizState = {
-      questions,
-      answers,
-      currentQuestionIndex,
-      quizSettings,
-      startTime,
-      timeRemaining: time,
-      isSimulationIntermission,
-    };
-    // Update silently in the background
+    const progress: InProgressQuizState = { questions, answers, currentQuestionIndex, quizSettings, startTime, timeRemaining: time, isSimulationIntermission };
     api.updateUser(currentUser.id, { inProgressQuiz: progress }, true);
   };
 
   const handleSaveAndExit = (time: number) => {
       if (!currentUser || !quizSettings) return;
-      const progress: InProgressQuizState = {
-        questions,
-        answers: inProgressAnswers,
-        currentQuestionIndex,
-        quizSettings,
-        startTime,
-        timeRemaining: time,
-        isSimulationIntermission,
-      };
+      const progress: InProgressQuizState = { questions, answers: inProgressAnswers, currentQuestionIndex, quizSettings, startTime, timeRemaining: time, isSimulationIntermission };
       const updatedUser = api.updateUser(currentUser.id, { inProgressQuiz: progress });
       setCurrentUser(updatedUser);
       setCurrentView('home');
@@ -243,17 +226,13 @@ const App: React.FC = () => {
     const updatedUser = api.updateUser(currentUser.id, { inProgressQuiz: null });
     setCurrentUser(updatedUser);
     resetQuizState();
-    // Stays on home page, user can now start a new quiz
   };
   
   const handleNavigate = (destination: 'next' | 'prev' | number) => {
-      if (typeof destination === 'number') {
-          setCurrentQuestionIndex(destination);
-      } else {
+      if (typeof destination === 'number') setCurrentQuestionIndex(destination);
+      else {
           const newIndex = destination === 'next' ? currentQuestionIndex + 1 : currentQuestionIndex - 1;
-          if (newIndex >= 0 && newIndex < questions.length) {
-              setCurrentQuestionIndex(newIndex);
-          }
+          if (newIndex >= 0 && newIndex < questions.length) setCurrentQuestionIndex(newIndex);
       }
       setFollowUpAnswer('');
   };
@@ -280,9 +259,7 @@ const App: React.FC = () => {
           const newAnswers = [...prev];
           const current = newAnswers[currentQuestionIndex];
           const existingStruck = current.strikethroughOptions || [];
-          const newStruck = existingStruck.includes(option)
-              ? existingStruck.filter(o => o !== option)
-              : [...existingStruck, option];
+          const newStruck = existingStruck.includes(option) ? existingStruck.filter(o => o !== option) : [...existingStruck, option];
           newAnswers[currentQuestionIndex] = { ...current, strikethroughOptions: newStruck };
           return newAnswers;
       });
@@ -292,7 +269,6 @@ const App: React.FC = () => {
     if (quizSettings?.examMode === 'simulation' && quizPart === 'closed') {
         setClosedBookAnswers(inProgressAnswers);
         setIsSimulationIntermission(true);
-        // Reset state for open book part
         setCurrentQuestionIndex(0);
         setInProgressAnswers(prev => prev.map(a => ({...a, userAnswer: null, flagged: false, strikethroughOptions: []})));
         return;
@@ -309,91 +285,39 @@ const App: React.FC = () => {
   const handleFinalSubmit = () => {
     if (!currentUser || !quizSettings) return;
 
+    let userAnswers: UserAnswer[];
+    let score: number;
+    let totalQuestions: number;
+    let finalExamName = quizSettings.examName;
+
     if (quizSettings.examMode === 'simulation' && closedBookAnswers) {
-      // Handle simulation scoring
-      const closedBookUserAnswers: UserAnswer[] = questions.map((q, i) => {
-        const isCorrect = q.answer === closedBookAnswers[i].userAnswer;
-        return {
-          question: `(Closed Book) ${q.question}`,
-          options: q.options,
-          answer: q.answer,
-          userAnswer: closedBookAnswers[i].userAnswer || 'Not Answered',
-          isCorrect,
-          category: q.category
-        };
-      });
-
-      const openBookUserAnswers: UserAnswer[] = questions.map((q, i) => {
-        const isCorrect = q.answer === inProgressAnswers[i].userAnswer;
-        return {
-          question: `(Open Book) ${q.question}`,
-          options: q.options,
-          answer: q.answer,
-          userAnswer: inProgressAnswers[i].userAnswer || 'Not Answered',
-          isCorrect,
-          category: q.category
-        };
-      });
-      
-      const allUserAnswers = [...closedBookUserAnswers, ...openBookUserAnswers];
-      const score = allUserAnswers.filter(a => a.isCorrect).length;
-      const totalQuestions = allUserAnswers.length;
-
-      const result: QuizResult = {
-        id: `result-${Date.now()}`,
-        userId: currentUser.id,
-        examName: `${quizSettings.examName} (Simulation)`,
-        score,
-        totalQuestions,
-        percentage: totalQuestions > 0 ? (score / totalQuestions) * 100 : 0,
-        date: Date.now(),
-        userAnswers: allUserAnswers,
-      };
-      
-      setQuizResult(result);
-      const updatedHistory = [...currentUser.history, result];
-      const updatedUser = api.updateUser(currentUser.id, { history: updatedHistory, inProgressQuiz: null });
-      setCurrentUser(updatedUser);
-      setCurrentView('score');
-
+      const closedBookUserAnswers: UserAnswer[] = questions.map((q, i) => ({ question: `(Closed Book) ${q.question}`, options: q.options, answer: q.answer, userAnswer: closedBookAnswers[i].userAnswer || 'Not Answered', isCorrect: q.answer === closedBookAnswers[i].userAnswer, category: q.category }));
+      const openBookUserAnswers: UserAnswer[] = questions.map((q, i) => ({ question: `(Open Book) ${q.question}`, options: q.options, answer: q.answer, userAnswer: inProgressAnswers[i].userAnswer || 'Not Answered', isCorrect: q.answer === inProgressAnswers[i].userAnswer, category: q.category }));
+      userAnswers = [...closedBookUserAnswers, ...openBookUserAnswers];
+      score = userAnswers.filter(a => a.isCorrect).length;
+      totalQuestions = userAnswers.length;
+      finalExamName = `${quizSettings.examName} (Simulation)`;
     } else {
-      // Original logic for non-simulation exams
-      let score = 0;
-      const userAnswers: UserAnswer[] = questions.map((q, i) => {
-          const isCorrect = q.answer === inProgressAnswers[i].userAnswer;
-          if (isCorrect) score++;
-          return {
-              question: q.question,
-              options: q.options,
-              answer: q.answer,
-              userAnswer: inProgressAnswers[i].userAnswer || 'Not Answered',
-              isCorrect,
-              category: q.category
-          };
-      });
-
-      const result: QuizResult = {
-          id: `result-${Date.now()}`,
-          userId: currentUser.id,
-          examName: quizSettings.examName,
-          score,
-          totalQuestions: questions.length,
-          percentage: questions.length > 0 ? (score / questions.length) * 100 : 0,
-          date: Date.now(),
-          userAnswers,
-      };
-      
-      setQuizResult(result);
-      const updatedHistory = [...currentUser.history, result];
-      const updatedUser = api.updateUser(currentUser.id, { history: updatedHistory, inProgressQuiz: null });
-      setCurrentUser(updatedUser);
-      setCurrentView('score');
+      userAnswers = questions.map((q, i) => ({ question: q.question, options: q.options, answer: q.answer, userAnswer: inProgressAnswers[i].userAnswer || 'Not Answered', isCorrect: q.answer === inProgressAnswers[i].userAnswer, category: q.category }));
+      score = userAnswers.filter(a => a.isCorrect).length;
+      totalQuestions = questions.length;
     }
+
+    const result: QuizResult = {
+      id: `result-${Date.now()}`, userId: currentUser.id, examName: finalExamName, score, totalQuestions,
+      percentage: totalQuestions > 0 ? (score / totalQuestions) * 100 : 0, date: Date.now(), userAnswers,
+    };
+      
+    setQuizResult(result);
+    const updatedHistory = [...currentUser.history, result];
+    const updatedUser = api.updateUser(currentUser.id, { history: updatedHistory, inProgressQuiz: null });
+    setCurrentUser(updatedUser);
+    setCurrentView('score');
+    api.logActivity('quiz_complete', `scored ${result.percentage.toFixed(1)}% on ${finalExamName}.`, currentUser.id, currentUser.email);
   };
   
   const handleAskFollowUp = async (question: Question, query: string) => {
-    setIsFollowUpLoading(true);
-    setFollowUpAnswer('');
+    setIsFollowUpLoading(true); setFollowUpAnswer('');
     try {
       const answer = await api.getFollowUpAnswer(question, query);
       setFollowUpAnswer(answer);
@@ -417,9 +341,13 @@ const App: React.FC = () => {
     setCurrentView('home');
   };
   
-  // For STARTER users upgrading for the first time or expired users renewing
   const handleUpgrade = (tier: SubscriptionTier) => {
-    if (!currentUser) return;
+    if (!currentUser) {
+        setPostLoginAction(() => () => handleUpgrade(tier));
+        setAuthModal('signup');
+        return;
+    }
+    api.logActivity('view_paywall', 'viewed the upgrade options.', currentUser.id, currentUser.email);
     const slots = tier === 'PROFESSIONAL' ? 1 : tier === 'SPECIALIST' ? 2 : 0;
     if (slots === 0) return;
     
@@ -428,10 +356,7 @@ const App: React.FC = () => {
     setCurrentView('select_unlocked_exams');
   };
 
-  // For paid users buying an additional slot
-  const handleInitiateUnlockPurchase = (examName: string, price: string) => {
-    setExamToPurchase({ name: examName, price });
-  };
+  const handleInitiateUnlockPurchase = (examName: string, price: string) => setExamToPurchase({ name: examName, price });
   
   const handleConfirmUnlockPurchase = () => {
     if (!currentUser) return;
@@ -441,146 +366,35 @@ const App: React.FC = () => {
     setCurrentView('select_unlocked_exams');
   };
 
-  // Called from ExamUnlockSelector after user makes their choice
   const handleConfirmUnlock = (selectedExamNames: string[]) => {
     if (!currentUser) return;
-    
     const currentUnlocked = currentUser.unlockedExams || [];
     const newUnlocked = [...new Set([...currentUnlocked, ...selectedExamNames])];
-    
-    const updatedUser = api.updateUser(currentUser.id, {
-      unlockedExams: newUnlocked,
-    });
-    
+    const updatedUser = api.updateUser(currentUser.id, { unlockedExams: newUnlocked });
     setCurrentUser(updatedUser);
     setCurrentView('home');
   };
 
-  const renderContent = () => {
-    if (isLoading) {
-      return <div className="flex items-center justify-center h-screen text-xl font-semibold">{loadingMessage || 'Loading...'}</div>;
-    }
-
-    if (!currentUser) {
-      return <Login onLoginSuccess={handleLoginSuccess} />;
-    }
-
+  const renderLoggedInContent = () => {
     switch (currentView) {
-      case 'home':
-        return <HomePage 
-          user={currentUser} 
-          onStartQuiz={handleStartQuiz} 
-          onViewDashboard={() => setCurrentView('dashboard')}
-          onViewProfile={() => setCurrentView('profile')}
-          onViewAdmin={() => setCurrentView('admin')}
-          onLogout={handleLogout}
-          onUpgrade={() => setCurrentView('paywall')}
-          onResumeQuiz={handleResumeQuiz}
-          onAbandonQuiz={handleAbandonQuiz}
-          onInitiateUnlockPurchase={handleInitiateUnlockPurchase}
-        />;
-      case 'select_mode':
-        return <ExamModeSelector 
-          examName={quizSettings!.examName} 
-          onSelectMode={handleSelectExamMode} 
-          onGoHome={() => { resetQuizState(); setCurrentView('home'); }} 
-        />;
-      case 'instructions':
-        const exam = api.getExams().find(e => e.name === quizSettings!.examName);
-        return <InstructionsModal 
-          examName={quizSettings!.examName} 
-          bodyOfKnowledge={exam?.bodyOfKnowledge || 'No details available.'}
-          onStart={() => generateAndStartQuiz(quizSettings!)} 
-          onCancel={() => setCurrentView('select_mode')} 
-        />;
-      case 'quiz':
-        return (
-          <>
-            {isSimulationIntermission && (
-              <InfoDialog 
-                open={true}
-                title="Closed Book Section Complete"
-                message="You will now proceed to the Open Book portion of the exam. You will be presented with the same set of questions, but now you can use your reference materials to answer them. The timer will reset for this section."
-                buttons={[{ text: "Start Open Book Section", style: 'primary', onClick: handleStartOpenBookSection }]}
-              />
-            )}
-            <ExamScreen 
-              key={quizPart}
-              user={currentUser}
-              questions={questions} 
-              quizSettings={quizSettings!} 
-              currentIndex={currentQuestionIndex} 
-              answers={inProgressAnswers}
-              onSelectAnswer={handleSelectAnswer}
-              onNavigate={handleNavigate}
-              onToggleFlag={handleToggleFlag}
-              onToggleStrikethrough={handleToggleStrikethrough}
-              onSubmit={handleSubmitQuiz}
-              onSaveAndExit={handleSaveAndExit}
-              onAutoSave={handleAutoSave}
-              onAskFollowUp={handleAskFollowUp}
-              followUpAnswer={followUpAnswer}
-              isFollowUpLoading={isFollowUpLoading}
-            />
-          </>
-        );
-      case 'review':
-        return <ReviewScreen 
-          questions={questions}
-          answers={inProgressAnswers}
-          onReviewQuestion={(index) => { setCurrentQuestionIndex(index); setCurrentView('quiz'); }}
-          onFinalSubmit={handleFinalSubmit}
-          onCancel={() => setCurrentView('quiz')}
-        />;
-      case 'score':
-        return <ScoreScreen 
-          result={quizResult!} 
-          onRestart={() => handleStartQuiz(quizResult!.examName, quizResult!.totalQuestions, quizSettings?.isTimed || false, quizSettings?.topics)}
-          onGoHome={() => { resetQuizState(); setCurrentView('home'); }}
-          isPro={currentUser.subscriptionTier !== 'STARTER'}
-          onViewDashboard={() => setCurrentView('dashboard')}
-          onRegenerate={() => { resetQuizState(); handleStartQuiz(quizResult!.examName, 120, true);}}
-        />;
-      case 'dashboard':
-        return <Dashboard 
-          user={currentUser} 
-          onGoHome={() => setCurrentView('home')} 
-          onStartWeaknessQuiz={(topics) => handleStartQuiz(currentUser.unlockedExams[0] || 'API 510', 20, false, topics)}
-          onUpgrade={() => setCurrentView('paywall')}
-        />;
-      case 'profile':
-        return <UserProfile 
-          user={currentUser}
-          onUpdateUser={handleUpdateUser}
-          onGoHome={() => setCurrentView('home')}
-          onViewDashboard={() => setCurrentView('dashboard')}
-          onManageSubscription={() => setCurrentView('paywall')}
-        />
-      case 'admin':
-        return <AdminDashboard onGoHome={() => setCurrentView('home')} currentUser={currentUser} onImpersonate={handleImpersonate} />;
-      case 'paywall':
-        return <Paywall user={currentUser} onUpgrade={handleUpgrade} onCancel={() => setCurrentView('home')} />;
-      case 'select_unlocked_exams':
-        return <ExamUnlockSelector
-          user={currentUser}
-          onConfirmUnlock={handleConfirmUnlock}
-          onCancel={() => setCurrentView('home')}
-        />;
-      default:
-        return <HomePage 
-          user={currentUser} 
-          onStartQuiz={handleStartQuiz} 
-          onViewDashboard={() => setCurrentView('dashboard')}
-          onViewProfile={() => setCurrentView('profile')}
-          onViewAdmin={() => setCurrentView('admin')}
-          onLogout={handleLogout}
-          onUpgrade={() => setCurrentView('paywall')}
-          onResumeQuiz={handleResumeQuiz}
-          onAbandonQuiz={handleAbandonQuiz}
-          onInitiateUnlockPurchase={handleInitiateUnlockPurchase}
-        />;
+      case 'home': return <HomePage user={currentUser!} onStartQuiz={handleStartQuiz} onViewDashboard={() => setCurrentView('dashboard')} onViewProfile={() => setCurrentView('profile')} onViewAdmin={() => setCurrentView('admin')} onLogout={handleLogout} onUpgrade={() => { api.logActivity('view_paywall', 'viewed upgrade options.', currentUser!.id, currentUser!.email); setCurrentView('paywall');}} onResumeQuiz={handleResumeQuiz} onAbandonQuiz={handleAbandonQuiz} onInitiateUnlockPurchase={handleInitiateUnlockPurchase} />;
+      case 'select_mode': return <ExamModeSelector examName={quizSettings!.examName} onSelectMode={handleSelectExamMode} onGoHome={() => { resetQuizState(); setCurrentView('home'); }} />;
+      case 'instructions': const exam = api.getExams().find(e => e.name === quizSettings!.examName); return <InstructionsModal examName={quizSettings!.examName} bodyOfKnowledge={exam?.bodyOfKnowledge || 'No details available.'} onStart={() => generateAndStartQuiz(quizSettings!)} onCancel={() => setCurrentView('select_mode')} />;
+      case 'quiz': return <>{isSimulationIntermission && <InfoDialog open={true} title="Closed Book Section Complete" message="You will now proceed to the Open Book portion of the exam. You will be presented with the same set of questions, but now you can use your reference materials to answer them. The timer will reset for this section." buttons={[{ text: "Start Open Book Section", style: 'primary', onClick: handleStartOpenBookSection }]} />}<ExamScreen key={quizPart} user={currentUser!} questions={questions} quizSettings={quizSettings!} currentIndex={currentQuestionIndex} answers={inProgressAnswers} onSelectAnswer={handleSelectAnswer} onNavigate={handleNavigate} onToggleFlag={handleToggleFlag} onToggleStrikethrough={handleToggleStrikethrough} onSubmit={handleSubmitQuiz} onSaveAndExit={handleSaveAndExit} onAutoSave={handleAutoSave} onAskFollowUp={handleAskFollowUp} followUpAnswer={followUpAnswer} isFollowUpLoading={isFollowUpLoading} /></>;
+      case 'review': return <ReviewScreen questions={questions} answers={inProgressAnswers} onReviewQuestion={(index) => { setCurrentQuestionIndex(index); setCurrentView('quiz'); }} onFinalSubmit={handleFinalSubmit} onCancel={() => setCurrentView('quiz')} />;
+      case 'score': return <ScoreScreen result={quizResult!} onRestart={() => handleStartQuiz(quizResult!.examName, quizResult!.totalQuestions, quizSettings?.isTimed || false, quizSettings?.topics)} onGoHome={() => { resetQuizState(); setCurrentView('home'); }} isPro={currentUser!.subscriptionTier !== 'STARTER'} onViewDashboard={() => setCurrentView('dashboard')} onRegenerate={() => { resetQuizState(); handleStartQuiz(quizResult!.examName, 120, true);}} />;
+      case 'dashboard': return <Dashboard user={currentUser!} onGoHome={() => setCurrentView('home')} onStartWeaknessQuiz={(topics) => handleStartQuiz(currentUser!.unlockedExams[0] || 'API 510', 20, false, topics)} onUpgrade={() => { api.logActivity('view_paywall', 'viewed upgrade options.', currentUser!.id, currentUser!.email); setCurrentView('paywall');}} />;
+      case 'profile': return <UserProfile user={currentUser!} onUpdateUser={handleUpdateUser} onGoHome={() => setCurrentView('home')} onViewDashboard={() => setCurrentView('dashboard')} onManageSubscription={() => setCurrentView('paywall')} />;
+      case 'admin': return <AdminDashboard onGoHome={() => setCurrentView('home')} currentUser={currentUser!} onImpersonate={handleImpersonate} />;
+      case 'paywall': return <Paywall user={currentUser!} onUpgrade={handleUpgrade} onCancel={() => setCurrentView('home')} />;
+      case 'select_unlocked_exams': return <ExamUnlockSelector user={currentUser!} onConfirmUnlock={handleConfirmUnlock} onCancel={() => setCurrentView('home')} />;
+      default: return <HomePage user={currentUser!} onStartQuiz={handleStartQuiz} onViewDashboard={() => setCurrentView('dashboard')} onViewProfile={() => setCurrentView('profile')} onViewAdmin={() => setCurrentView('admin')} onLogout={handleLogout} onUpgrade={() => setCurrentView('paywall')} onResumeQuiz={handleResumeQuiz} onAbandonQuiz={handleAbandonQuiz} onInitiateUnlockPurchase={handleInitiateUnlockPurchase} />;
     }
   };
+  
+  if (isLoading) {
+    return <div className="flex items-center justify-center h-screen text-xl font-semibold">{loadingMessage || 'Loading Application...'}</div>;
+  }
   
   return (
     <>
@@ -590,34 +404,27 @@ const App: React.FC = () => {
           <button onClick={handleLogout} className="underline ml-2 font-bold">Return to Admin</button>
         </div>
       )}
-      {errorInfo && (
-        <InfoDialog
-          open={true}
-          title={errorInfo.title}
-          message={errorInfo.message}
-          buttons={[{
-            text: 'Return to Home',
-            style: 'primary',
-            onClick: () => {
-              setErrorInfo(null);
-              resetQuizState();
-              setCurrentView('home');
-            }
-          }]}
-        />
+      {errorInfo && ( <InfoDialog open={true} title={errorInfo.title} message={errorInfo.message} buttons={[{ text: 'Return to Home', style: 'primary', onClick: () => { setErrorInfo(null); resetQuizState(); setCurrentView('home'); }}]} /> )}
+      {examToPurchase && currentUser && ( <InfoDialog open={true} title="Confirm Purchase" message={`You are about to purchase access to the "${examToPurchase.name}" certification track for ${examToPurchase.price}." This is a one-time, non-refundable charge.`} buttons={[{ text: 'Cancel', style: 'neutral', onClick: () => setExamToPurchase(null) }, { text: 'Confirm Purchase', style: 'primary', onClick: handleConfirmUnlockPurchase }]} /> )}
+      
+      {!currentUser ? (
+        <>
+            <PublicWebsite 
+                currentUser={null}
+                onLogin={() => setAuthModal('login')}
+                onSignup={() => setAuthModal('signup')}
+                onLogout={handleLogout} // for completeness
+                onGoToDashboard={() => setCurrentView('home')} // for completeness
+            />
+            {authModal === 'login' && <Login onLoginSuccess={handleLoginSuccess} isModal onCancel={() => setAuthModal(null)} />}
+            {authModal === 'signup' && <Login onLoginSuccess={handleLoginSuccess} isModal onCancel={() => setAuthModal(null)} />}
+        </>
+      ) : (
+        <>
+            {showOnboarding && <OnboardingTour user={currentUser!} onComplete={() => setShowOnboarding(false)} />}
+            {renderLoggedInContent()}
+        </>
       )}
-      {examToPurchase && currentUser && (
-         <InfoDialog
-          open={true}
-          title="Confirm Purchase"
-          message={`You are about to purchase access to the "${examToPurchase.name}" certification track for ${examToPurchase.price}. This access will be valid until your current subscription expires on ${currentUser.subscriptionExpiresAt ? new Date(currentUser.subscriptionExpiresAt).toLocaleDateString() : 'your renewal date'}.`}
-          buttons={[
-            { text: 'Cancel', style: 'neutral', onClick: () => setExamToPurchase(null) },
-            { text: 'Confirm Purchase', style: 'primary', onClick: handleConfirmUnlockPurchase },
-          ]}
-        />
-      )}
-      {renderContent()}
     </>
   );
 };
