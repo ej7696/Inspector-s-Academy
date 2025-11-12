@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { User, Testimonial } from '../types';
 import Logo from './Logo';
@@ -35,13 +36,6 @@ const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogo
     "SIFE / SIRE / SIEE"
   ];
 
-  const starterFeatures = [
-    "15 free practice questions per month",
-    "Explore all certifications",
-    "Up to 2 practice questions per certification",
-    "Upgrade anytime for full access"
-  ];
-
   return (
     <div className="bg-white min-h-screen font-sans">
       {/* Header */}
@@ -60,7 +54,7 @@ const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogo
                 ) : (
                     <>
                         <button onClick={onLogin} className="px-4 py-2 text-base font-semibold text-gray-700 rounded-md hover:bg-gray-100">Log In</button>
-                        <button onClick={() => onNavigate('/login')} className="px-4 py-2 text-base font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700">Sign Up Free</button>
+                        <button onClick={() => onNavigate('/signup')} className="px-4 py-2 text-base font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700">Sign Up Free</button>
                     </>
                 )}
             </div>
@@ -100,7 +94,7 @@ const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogo
                 </div>
 
                 <div className="mt-6 flex justify-center gap-4">
-                    <button onClick={onSignup} className="bg-blue-600 text-white font-bold py-3 px-8 rounded-lg text-lg hover:bg-blue-700 transition-transform hover:scale-105">
+                    <button onClick={() => onNavigate('/signup')} className="bg-blue-600 text-white font-bold py-3 px-8 rounded-lg text-lg hover:bg-blue-700 transition-transform hover:scale-105">
                         Start Practicing for Free
                     </button>
                 </div>
@@ -155,7 +149,7 @@ const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogo
                 <h2 className="text-3xl font-extrabold text-gray-900">Try it Now. No Signup Required.</h2>
                 <p className="mt-4 text-lg text-gray-600">Experience the quality of our Dynamic Question Engine with this free 3-question sample quiz.</p>
                 <div className="mt-8">
-                    <FreeSampleQuiz onSignup={onSignup} />
+                    <FreeSampleQuiz onSignup={() => onNavigate('/signup')} />
                 </div>
             </div>
         </div>
@@ -202,35 +196,13 @@ const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogo
         
         {/* === SECTION 5: PRICING & CTA (ACTION) === */}
         <div className="bg-white py-16">
-            <div className="max-w-lg mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="text-center mb-12">
-                    <h2 className="text-3xl font-extrabold text-gray-900">Ready to Pass With Confidence?</h2>
-                    <p className="mt-4 text-lg text-gray-600">Start for free today. It's the best way to see the power of our platform.</p>
-                </div>
-        
-                {/* New Dedicated Starter Card */}
-                <div className="rounded-xl p-8 border border-gray-200 bg-gray-50 shadow-lg">
-                    <h3 className="text-2xl font-bold text-center">Starter</h3>
-                    <p className="text-md text-gray-500 text-center">A preview to get you started.</p>
-                    <div className="my-6 text-center">
-                        <span className="text-5xl font-extrabold text-gray-800">Free</span>
-                    </div>
-                    <ul className="text-md space-y-3 text-gray-600 mb-8">
-                        {starterFeatures.map(feature => (
-                           <li key={feature} className="flex items-start">
-                               <svg className="w-5 h-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
-                               <span>{feature}</span>
-                           </li>
-                        ))}
-                    </ul>
-                    <button
-                        onClick={onSignup}
-                        className="w-full p-4 rounded-lg font-bold text-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-                    >
-                        Create Your Free Account
-                    </button>
-                </div>
-            </div>
+             <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+                 <div className="text-center mb-12">
+                     <h2 className="text-3xl font-extrabold text-gray-900">Ready to Pass With Confidence?</h2>
+                     <p className="mt-4 text-lg text-gray-600">Start for free today. Upgrade when you're ready for unlimited access.</p>
+                 </div>
+                <PricingTiers user={{ subscriptionTier: 'STARTER' } as User} onUpgrade={() => onNavigate('/signup')} />
+             </div>
         </div>
 
       </main>

@@ -364,10 +364,10 @@ const App: React.FC = () => {
   
   const handleUpgrade = (tier: SubscriptionTier) => {
     if (!currentUser) {
-        handleNavigate('/login');
+        handleNavigate('/signup');
         return;
     }
-    api.logActivity('view_paywall', 'viewed upgrade options.', currentUser.id, currentUser.email);
+    api.logActivity('view_paywall', 'viewed the upgrade options.', currentUser.id, currentUser.email);
     const slots = tier === 'PROFESSIONAL' ? 1 : tier === 'SPECIALIST' ? 2 : 0;
     if (slots === 0) return;
     
@@ -441,7 +441,7 @@ const App: React.FC = () => {
         <PublicWebsite 
             currentUser={currentUser}
             onLogin={() => setAuthModal('login')}
-            onSignup={() => handleNavigate('/login')}
+            onSignup={() => handleNavigate('/signup')}
             onLogout={handleLogout} 
             onGoToDashboard={() => {
                 // This will re-render the app into the logged-in view
