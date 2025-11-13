@@ -110,12 +110,14 @@ const ProfessionalDashboard: React.FC<{ user: User, onGoHome: () => void, onStar
     const weaknessAnalysis = useMemo(() => {
         const categoryStats: { [key: string]: { correct: number; total: number } } = {};
         examHistory.forEach(result => {
-          result.userAnswers.forEach(ua => {
-            const category = ua.category || 'Uncategorized';
-            if (!categoryStats[category]) categoryStats[category] = { correct: 0, total: 0 };
-            categoryStats[category].total++;
-            if (ua.isCorrect) categoryStats[category].correct++;
-          });
+          if (Array.isArray(result.userAnswers)) {
+            result.userAnswers.forEach(ua => {
+              const category = ua.category || 'Uncategorized';
+              if (!categoryStats[category]) categoryStats[category] = { correct: 0, total: 0 };
+              categoryStats[category].total++;
+              if (ua.isCorrect) categoryStats[category].correct++;
+            });
+          }
         });
 
         return Object.entries(categoryStats)
@@ -224,13 +226,15 @@ const SpecialistDashboard: React.FC<{ user: User, onGoHome: () => void, onStartW
     const crossExamWeakness = useMemo(() => {
         const categoryStats: { [key: string]: { correct: number; total: number, exams: Set<string> } } = {};
         user.history.forEach(result => {
-          result.userAnswers.forEach(ua => {
-            const category = ua.category || 'Uncategorized';
-            if (!categoryStats[category]) categoryStats[category] = { correct: 0, total: 0, exams: new Set() };
-            categoryStats[category].total++;
-            if (ua.isCorrect) categoryStats[category].correct++;
-            categoryStats[category].exams.add(result.examName);
-          });
+          if (Array.isArray(result.userAnswers)) {
+            result.userAnswers.forEach(ua => {
+              const category = ua.category || 'Uncategorized';
+              if (!categoryStats[category]) categoryStats[category] = { correct: 0, total: 0, exams: new Set() };
+              categoryStats[category].total++;
+              if (ua.isCorrect) categoryStats[category].correct++;
+              categoryStats[category].exams.add(result.examName);
+            });
+          }
         });
 
         return Object.entries(categoryStats)

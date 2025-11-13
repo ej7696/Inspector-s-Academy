@@ -22,19 +22,19 @@ const ReviewScreen: React.FC<Props> = ({ questions, answers, onReviewQuestion, o
 
     const getStatusClass = (index: number) => {
         const answer = answers[index];
-        const question = questions[index];
         
+        // Guard against misaligned arrays to prevent crash
+        if (!answer) {
+            return 'bg-gray-100 border-gray-300';
+        }
+
         if (answer.flagged) {
             return 'bg-yellow-100 border-yellow-500 text-yellow-800 hover:bg-yellow-200';
         }
         
         if (answer.userAnswer) {
-            const isCorrect = answer.userAnswer === question.answer;
-            if (isCorrect) {
-                return 'bg-green-100 border-green-500 text-green-800 hover:bg-green-200';
-            } else {
-                return 'bg-red-100 border-red-500 text-red-800 hover:bg-red-200';
-            }
+            // On the review screen, we only show that it's answered, not if it's correct.
+            return 'bg-blue-100 border-blue-500 text-blue-800 hover:bg-blue-200';
         }
         
         return 'bg-white border-gray-400 text-gray-800 hover:bg-gray-200';
@@ -68,7 +68,7 @@ const ReviewScreen: React.FC<Props> = ({ questions, answers, onReviewQuestion, o
                 <div className="flex-grow overflow-y-auto pr-2 space-y-6">
                    <CategorySection title="Flagged for Review" indices={summary.flagged} color="yellow" />
                    <CategorySection title="Unanswered" indices={summary.unanswered} color="red" />
-                   <CategorySection title="Answered" indices={summary.answered} color="green" />
+                   <CategorySection title="Answered" indices={summary.answered} color="blue" />
                 </div>
                 
                 <div className="flex justify-end gap-4 mt-6 pt-6 border-t">

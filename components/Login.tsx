@@ -5,14 +5,10 @@ import Logo from './Logo';
 
 interface Props {
   onLoginSuccess: (user: User) => void;
-  isModal?: boolean;
-  onCancel?: () => void;
-  initialView?: 'login' | 'signup';
-  onNavigate?: (path: string) => void;
 }
 
-const Login: React.FC<Props> = ({ onLoginSuccess, isModal = false, onCancel, initialView = 'login', onNavigate }) => {
-  const [view, setView] = useState<'login' | 'signup'>(initialView);
+const Login: React.FC<Props> = ({ onLoginSuccess }) => {
+  const [view, setView] = useState<'login' | 'signup'>('login');
   
   // Login State
   const [email, setEmail] = useState('');
@@ -81,11 +77,7 @@ const Login: React.FC<Props> = ({ onLoginSuccess, isModal = false, onCancel, ini
   
   const switchView = (newView: 'login' | 'signup') => {
       resetForm();
-      if (onNavigate) {
-        onNavigate(newView === 'login' ? '/login' : '/signup');
-      } else {
-        setView(newView);
-      }
+      setView(newView);
   };
   
   // --- RENDER LOGIC ---
@@ -127,34 +119,19 @@ const Login: React.FC<Props> = ({ onLoginSuccess, isModal = false, onCancel, ini
     </>
   );
 
-  const currentRenderView = isModal ? view : initialView;
-
   const content = (
     <div className="p-8 sm:p-12 flex flex-col justify-center animate-fade-in-up relative">
-      {isModal && <button onClick={onCancel} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-2xl">&times;</button>}
-      {currentRenderView === 'login' ? renderLogin() : renderSignup()}
-      {!isModal && (
-        <div className="mt-8 text-center">
-            <p className="text-sm text-gray-500 mb-3" style={{ fontFamily: 'Poppins, sans-serif' }}>Or Explore the Platform With a Demo Account</p>
-            <div className="flex flex-col sm:flex-row gap-2 justify-center">
-                <button onClick={() => handleDemoLogin('admin@test.com', 'admin123')} className="flex-1 text-xs text-center py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition font-medium" style={{ fontFamily: 'Poppins, sans-serif' }}>Log in as Admin</button>
-                <button onClick={() => handleDemoLogin('subadmin@test.com', 'subadmin123')} className="flex-1 text-xs text-center py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition font-medium" style={{ fontFamily: 'Poppins, sans-serif' }}>Log in as Subadmin</button>
-                <button onClick={() => handleDemoLogin('cadet@test.com', 'password123')} className="flex-1 text-xs text-center py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition font-medium" style={{ fontFamily: 'Poppins, sans-serif' }}>Log in as User</button>
-            </div>
-        </div>
-      )}
+      {view === 'login' ? renderLogin() : renderSignup()}
+      <div className="mt-8 text-center">
+          <p className="text-sm text-gray-500 mb-3" style={{ fontFamily: 'Poppins, sans-serif' }}>Or Explore the Platform With a Demo Account</p>
+          <div className="flex flex-col sm:flex-row gap-2 justify-center">
+              <button onClick={() => handleDemoLogin('admin@test.com', 'admin123')} className="flex-1 text-xs text-center py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition font-medium" style={{ fontFamily: 'Poppins, sans-serif' }}>Log in as Admin</button>
+              <button onClick={() => handleDemoLogin('subadmin@test.com', 'subadmin123')} className="flex-1 text-xs text-center py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition font-medium" style={{ fontFamily: 'Poppins, sans-serif' }}>Log in as Subadmin</button>
+              <button onClick={() => handleDemoLogin('cadet@test.com', 'password123')} className="flex-1 text-xs text-center py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition font-medium" style={{ fontFamily: 'Poppins, sans-serif' }}>Log in as User</button>
+          </div>
+      </div>
     </div>
   );
-  
-  if (isModal) {
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" onClick={onCancel}>
-        <div className="bg-white rounded-xl shadow-2xl overflow-hidden w-full max-w-md" onClick={e => e.stopPropagation()}>
-          {content}
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">

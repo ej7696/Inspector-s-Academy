@@ -80,8 +80,8 @@ class ApiService {
     
     const newRemaining = (user.monthlyQuestionRemaining || 0) - numQuestions;
     const newExamUsage = { 
-      ...user.monthlyExamUsage, 
-      [examName]: (user.monthlyExamUsage?.[examName] || 0) + numQuestions 
+      ...(user.monthlyExamUsage || {}), 
+      [examName]: ((user.monthlyExamUsage || {})[examName] || 0) + numQuestions 
     };
 
     return this.updateUser(userId, {
@@ -136,7 +136,13 @@ class ApiService {
 
   // --- Users ---
   getAllUsers(): User[] {
-    return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.USERS) || '[]');
+    const usersFromStorage = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.USERS) || '[]') as Partial<User>[];
+    // Sanitize data to prevent errors from older localStorage schemas where array properties might be missing.
+    return usersFromStorage.map(user => ({
+      ...user,
+      history: Array.isArray(user.history) ? user.history : [],
+      unlockedExams: Array.isArray(user.unlockedExams) ? user.unlockedExams : [],
+    })) as User[];
   }
   
   updateUser(userId: string, updates: Partial<User>, silent: boolean = false): User {
@@ -354,12 +360,17 @@ class ApiService {
 
   // --- AI Generation ---
   async generateQuestions(examName: string, numQuestions: number, topics?: string): Promise<Question[]> {
+    const currentUser = this.getCurrentUser();
+    if (!currentUser) {
+        throw new Error("No user is currently logged in. Please log in to generate a quiz.");
+    }
+    
     const examData = this.getExams().find(e => e.name === examName);
     if (!examData) {
       throw new Error("Exam data not found.");
     }
     
-    this.logActivity('quiz_start', `started a ${numQuestions}-question quiz for ${examName}.`, this.getCurrentUser()!.id, this.getCurrentUser()!.email);
+    this.logActivity('quiz_start', `started a ${numQuestions}-question quiz for ${examName}.`, currentUser.id, currentUser.email);
     
     const { bodyOfKnowledge, effectivitySheet } = examData;
 

@@ -83,6 +83,7 @@ const PricingTiers: React.FC<Props> = ({ user, onUpgrade }) => {
             </ul>
             {tier.cta && !isCurrent && (
               <button
+                type="button"
                 onClick={() => onUpgrade(tier.tier)}
                 className={`w-full p-3 rounded-lg font-bold text-lg transition-colors ${tier.isPopular ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
               >

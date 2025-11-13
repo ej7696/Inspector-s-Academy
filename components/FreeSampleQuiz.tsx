@@ -1,4 +1,5 @@
 
+
 import React, { useState } from 'react';
 import { Question } from '../types';
 import api from '../services/apiService';
@@ -62,7 +63,7 @@ const FreeSampleQuiz: React.FC<Props> = ({ onSignup }) => {
             <h3 className="text-2xl font-bold text-gray-800">Quiz Complete!</h3>
             <p className="text-lg text-gray-600 mt-2">You got {correctAnswers} out of {sampleQuestions.length} correct.</p>
             <p className="mt-4 text-xl text-gray-700">Like these questions? Get 15 more every month for free.</p>
-            <button onClick={onSignup} className="mt-6 bg-green-600 text-white font-bold py-3 px-8 rounded-lg text-lg hover:bg-green-700 transition-transform hover:scale-105">
+            <button type="button" onClick={onSignup} className="mt-6 bg-green-600 text-white font-bold py-3 px-8 rounded-lg text-lg hover:bg-green-700 transition-transform hover:scale-105">
                 Create Your Free Starter Account
             </button>
         </div>

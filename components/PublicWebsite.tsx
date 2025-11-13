@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { User, Testimonial } from '../types';
 import Logo from './Logo';
@@ -9,14 +8,12 @@ import FreeSampleQuiz from './FreeSampleQuiz';
 
 interface Props {
   currentUser: User | null;
-  onLogin: () => void;
-  onSignup: () => void;
   onLogout: () => void;
   onGoToDashboard: () => void;
   onNavigate: (path: string) => void;
 }
 
-const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogout, onGoToDashboard, onNavigate }) => {
+const PublicWebsite: React.FC<Props> = ({ currentUser, onLogout, onGoToDashboard, onNavigate }) => {
   const [testimonial, setTestimonial] = useState<Testimonial | null>(null);
   const [isVideoOpen, setIsVideoOpen] = useState(false);
 
@@ -48,13 +45,13 @@ const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogo
             <div className="flex items-center gap-2">
                 {currentUser ? (
                     <>
-                        <button onClick={onGoToDashboard} className="px-4 py-2 text-base font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700">Dashboard</button>
-                        <button onClick={onLogout} className="px-4 py-2 text-base font-semibold text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300">Logout</button>
+                        <button type="button" onClick={onGoToDashboard} className="px-4 py-2 text-base font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700">Dashboard</button>
+                        <button type="button" onClick={onLogout} className="px-4 py-2 text-base font-semibold text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300">Logout</button>
                     </>
                 ) : (
                     <>
-                        <button onClick={onLogin} className="px-4 py-2 text-base font-semibold text-gray-700 rounded-md hover:bg-gray-100">Log In</button>
-                        <button onClick={() => onNavigate('/signup')} className="px-4 py-2 text-base font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700">Sign Up Free</button>
+                        <button type="button" onClick={() => onNavigate('/login')} className="px-4 py-2 text-base font-semibold text-gray-700 rounded-md hover:bg-gray-100">Log In</button>
+                        <button type="button" onClick={() => onNavigate('/signup')} className="px-4 py-2 text-base font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700">Sign Up Free</button>
                     </>
                 )}
             </div>
@@ -85,7 +82,7 @@ const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogo
                             alt="Explainer video thumbnail" 
                             className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
                         />
-                        <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center">
+                        <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center pointer-events-none">
                             <div className="w-20 h-20 bg-white/30 backdrop-blur-sm rounded-full flex items-center justify-center transition-transform group-hover:scale-110">
                                 <svg className="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 20 20"><path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"></path></svg>
                             </div>
@@ -93,8 +90,8 @@ const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogo
                     </div>
                 </div>
 
-                <div className="mt-6 flex justify-center gap-4">
-                    <button onClick={() => onNavigate('/signup')} className="bg-blue-600 text-white font-bold py-3 px-8 rounded-lg text-lg hover:bg-blue-700 transition-transform hover:scale-105">
+                <div className="mt-6 flex justify-center gap-4 relative z-10">
+                    <button type="button" onClick={() => onNavigate('/signup')} className="bg-blue-600 text-white font-bold py-3 px-8 rounded-lg text-lg hover:bg-blue-700 transition-transform hover:scale-105">
                         Start Practicing for Free
                     </button>
                 </div>
@@ -162,7 +159,7 @@ const PublicWebsite: React.FC<Props> = ({ currentUser, onLogin, onSignup, onLogo
                         <h3 className="text-3xl font-extrabold text-gray-900">Dynamic Question Engine</h3>
                         <p className="mt-4 text-lg text-gray-600">Master Concepts, Not Just Answers. Our platform constructs a unique quiz for you in real-time, pulling directly from the official code books. This proven method forces you to truly understand the material, preventing the dangerous habit of simply memorizing a static list of old questions.</p>
                     </div>
-                    <img src="https://i.ibb.co/3k0bYhX/feature1.png" alt="Dynamic questions being generated" className="rounded-lg shadow-lg" />
+                    <img src="https://i.ibb.co/yBYW8g7/dynamic-engine.png" alt="Dynamic questions being generated" className="rounded-lg shadow-lg" />
                  </div>
                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
                     <img src="https://i.ibb.co/RSCt8s3/feature2.png" alt="Timed exam simulation interface" className="rounded-lg shadow-lg lg:order-last" />

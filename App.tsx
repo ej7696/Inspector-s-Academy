@@ -15,15 +15,11 @@ import AdminDashboard from './components/AdminDashboard';
 import Paywall from './components/Paywall';
 import InfoDialog from './components/InfoDialog';
 import ExamUnlockSelector from './components/ExamUnlockSelector';
-import PublicWebsite from './components/PublicWebsite';
 import OnboardingTour from './components/OnboardingTour';
 import ForceChangePassword from './components/ForceChangePassword';
-import BlogPage from './components/BlogPage';
-import ArticlePage from './components/ArticlePage';
 
 
 type View = 'login' | 'home' | 'select_mode' | 'instructions' | 'quiz' | 'review' | 'score' | 'dashboard' | 'profile' | 'admin' | 'paywall' | 'select_unlocked_exams' | 'force_password_change';
-type AuthModal = 'login' | null;
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -47,28 +43,10 @@ const App: React.FC = () => {
   
   // B2C Growth State
   const [examToPurchase, setExamToPurchase] = useState<{name: string, price: string} | null>(null);
-  const [authModal, setAuthModal] = useState<AuthModal>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   
-  const [path, setPath] = useState(window.location.pathname);
-
   const [followUpAnswer, setFollowUpAnswer] = useState('');
   const [isFollowUpLoading, setIsFollowUpLoading] = useState(false);
-
-  useEffect(() => {
-    const onLocationChange = () => {
-        setPath(window.location.pathname);
-    };
-    window.addEventListener('popstate', onLocationChange);
-    return () => {
-        window.removeEventListener('popstate', onLocationChange);
-    };
-  }, []);
-
-  const handleNavigate = (newPath: string) => {
-      window.history.pushState({}, '', newPath);
-      setPath(newPath);
-  };
 
   useEffect(() => {
     api.initializeData();
@@ -97,8 +75,6 @@ const App: React.FC = () => {
 
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);
-    setAuthModal(null);
-    handleNavigate('/'); // Navigate to the main app view after successful login/signup
     
     if (user.mustChangePassword) {
       setCurrentView('force_password_change');
@@ -125,7 +101,6 @@ const App: React.FC = () => {
       setCurrentUser(null);
       setOriginalUser(null);
       resetQuizState();
-      handleNavigate('/'); // After logout, go to public homepage
     }
   };
 
@@ -173,9 +148,16 @@ const App: React.FC = () => {
   };
 
   const generateAndStartQuiz = async (settings: QuizSettings) => {
-    if (currentUser?.subscriptionTier === 'STARTER') {
-      const refreshedUser = api.checkAndResetMonthlyLimits(currentUser);
-      if (refreshedUser !== currentUser) {
+    const user = api.getCurrentUser();
+    if (!user) {
+        setErrorInfo({ title: 'Session Expired', message: 'Your login session has expired. Please log in again to start a quiz.' });
+        setCurrentUser(null);
+        return;
+    }
+
+    if (user.subscriptionTier === 'STARTER') {
+      const refreshedUser = api.checkAndResetMonthlyLimits(user);
+      if (refreshedUser !== user) {
         setCurrentUser(refreshedUser);
       }
       const monthlyRemaining = refreshedUser.monthlyQuestionRemaining || 0;
@@ -189,7 +171,7 @@ const App: React.FC = () => {
          setErrorInfo({ title: 'Question Limit Exceeded', message: `You can only take ${perExamLimit - usageForExam} more question(s) for the "${settings.examName}" exam this month.`});
         return;
       }
-      const updatedUser = api.recordStarterUsage(currentUser.id, settings.examName, settings.numQuestions);
+      const updatedUser = api.recordStarterUsage(user.id, settings.examName, settings.numQuestions);
       setCurrentUser(updatedUser);
     }
 
@@ -364,7 +346,6 @@ const App: React.FC = () => {
   
   const handleUpgrade = (tier: SubscriptionTier) => {
     if (!currentUser) {
-        handleNavigate('/signup');
         return;
     }
     api.logActivity('view_paywall', 'viewed the upgrade options.', currentUser.id, currentUser.email);
@@ -420,38 +401,6 @@ const App: React.FC = () => {
       default: return <HomePage user={currentUser!} onStartQuiz={handleStartQuiz} onViewDashboard={() => setCurrentView('dashboard')} onViewProfile={() => setCurrentView('profile')} onViewAdmin={() => setCurrentView('admin')} onLogout={handleLogout} onUpgrade={() => setCurrentView('paywall')} onResumeQuiz={handleResumeQuiz} onAbandonQuiz={handleAbandonQuiz} onInitiateUnlockPurchase={handleInitiateUnlockPurchase} />;
     }
   };
-
-  const renderPublicContent = () => {
-    if (path.startsWith('/blog/')) {
-        const slug = path.substring('/blog/'.length);
-        return <ArticlePage slug={slug} onNavigate={handleNavigate} />;
-    }
-    if (path === '/blog') {
-        return <BlogPage onNavigateHome={() => handleNavigate('/')} />;
-    }
-    if (path === '/login') {
-        return <Login onLoginSuccess={handleLoginSuccess} initialView="login" onNavigate={handleNavigate} />;
-    }
-    if (path === '/signup') {
-        return <Login onLoginSuccess={handleLoginSuccess} initialView="signup" onNavigate={handleNavigate} />;
-    }
-
-    // Default to the main landing page
-    return (
-        <PublicWebsite 
-            currentUser={currentUser}
-            onLogin={() => setAuthModal('login')}
-            onSignup={() => handleNavigate('/signup')}
-            onLogout={handleLogout} 
-            onGoToDashboard={() => {
-                // This will re-render the app into the logged-in view
-                handleNavigate('/');
-                setCurrentView('home');
-            }}
-            onNavigate={handleNavigate}
-        />
-    );
-  };
   
   if (isLoading) {
     return <div className="flex items-center justify-center h-screen text-xl font-semibold">{loadingMessage || 'Loading Application...'}</div>;
@@ -469,10 +418,7 @@ const App: React.FC = () => {
       {examToPurchase && currentUser && ( <InfoDialog open={true} title="Confirm Purchase" message={`You are about to purchase access to the "${examToPurchase.name}" certification track for ${examToPurchase.price}. This access is valid for the remainder of your current subscription period, ending on ${new Date(currentUser.subscriptionExpiresAt!).toLocaleDateString()}.`} buttons={[{ text: 'Cancel', style: 'neutral', onClick: () => setExamToPurchase(null) }, { text: 'Confirm Purchase', style: 'primary', onClick: handleConfirmUnlockPurchase }]} /> )}
       
       {!currentUser ? (
-        <>
-            {renderPublicContent()}
-            {authModal === 'login' && <Login onLoginSuccess={handleLoginSuccess} isModal onCancel={() => setAuthModal(null)} initialView="login" />}
-        </>
+        <Login onLoginSuccess={handleLoginSuccess} />
       ) : (
         <>
             {showOnboarding && <OnboardingTour user={currentUser!} onComplete={() => setShowOnboarding(false)} />}
