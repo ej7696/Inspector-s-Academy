@@ -49,7 +49,8 @@ const ExamScreen: React.FC<Props> = ({
   useEffect(() => {
     setShowExplanation(false);
     setFollowUpQuery('');
-    // Stop speaking when changing questions
+    
+    // Stop speaking when changing questions (important for UX)
     if (window.speechSynthesis) {
         window.speechSynthesis.cancel();
         setIsSpeaking(false);

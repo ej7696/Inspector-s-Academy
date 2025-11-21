@@ -517,7 +517,7 @@ class ApiService {
         model: 'gemini-2.5-flash',
         contents: prompt,
       });
-      return response.text;
+      return response.text || "I'm sorry, I couldn't generate a response at this time.";
     } catch (error) {
       console.error("Error getting follow-up answer:", error);
       throw new Error("Failed to get an answer. The AI model may be temporarily unavailable.");
