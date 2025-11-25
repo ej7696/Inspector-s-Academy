@@ -10,7 +10,8 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     define: {
       // This ensures process.env.API_KEY is replaced by the actual string value during build
-      'process.env.API_KEY': JSON.stringify(env.API_KEY),
+      // Falls back to process.env.API_KEY for cloud deployment environments (Vercel, Netlify, etc.)
+      'process.env.API_KEY': JSON.stringify(env.API_KEY || process.env.API_KEY),
     },
   }
 })

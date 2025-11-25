@@ -124,10 +124,10 @@ const Login: React.FC<Props> = ({ onLoginSuccess }) => {
       {view === 'login' ? renderLogin() : renderSignup()}
       <div className="mt-8 text-center">
           <p className="text-sm text-gray-500 mb-3" style={{ fontFamily: 'Poppins, sans-serif' }}>Or Explore the Platform With a Demo Account</p>
-          <div className="flex flex-col sm:flex-row gap-2 justify-center">
+          <div className="flex flex-col sm:flex-row gap-2 justify-center flex-wrap">
+              <button onClick={() => handleDemoLogin('specialist@test.com', 'password123')} className="flex-1 text-xs text-center py-2 px-3 bg-indigo-100 hover:bg-indigo-200 text-indigo-800 rounded-md transition font-bold border border-indigo-200" style={{ fontFamily: 'Poppins, sans-serif' }}>Log in as Specialist (Unlocked)</button>
+              <button onClick={() => handleDemoLogin('cadet@test.com', 'password123')} className="flex-1 text-xs text-center py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition font-medium" style={{ fontFamily: 'Poppins, sans-serif' }}>Log in as User (Limited)</button>
               <button onClick={() => handleDemoLogin('admin@test.com', 'admin123')} className="flex-1 text-xs text-center py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition font-medium" style={{ fontFamily: 'Poppins, sans-serif' }}>Log in as Admin</button>
-              <button onClick={() => handleDemoLogin('subadmin@test.com', 'subadmin123')} className="flex-1 text-xs text-center py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition font-medium" style={{ fontFamily: 'Poppins, sans-serif' }}>Log in as Subadmin</button>
-              <button onClick={() => handleDemoLogin('cadet@test.com', 'password123')} className="flex-1 text-xs text-center py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition font-medium" style={{ fontFamily: 'Poppins, sans-serif' }}>Log in as User</button>
           </div>
       </div>
     </div>
