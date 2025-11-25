@@ -1,8 +1,18 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { User, Question, ActivityEvent, Exam, Announcement, SubscriptionTierDetails, Role, QuizResult, InProgressQuizState, InProgressAnswer, UserAnswer, SubscriptionTier, Testimonial, BlogPost } from '../types';
+import { 
+  User, Question, ActivityEvent, Exam, Announcement, SubscriptionTierDetails, 
+  Role, QuizResult, InProgressQuizState, InProgressAnswer, UserAnswer, 
+  SubscriptionTier, Testimonial, BlogPost 
+} from '../types';
+
 import { seedData } from './seedData';
 import { examSourceData } from './examData';
 
+/**
+ * Initialize the Google GenAI client.
+ * Uses process.env.API_KEY which is polyfilled in vite.config.ts to work
+ * with both local .env files and cloud provider environment variables.
+ */
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const LOCAL_STORAGE_KEYS = {
@@ -30,24 +40,24 @@ class ApiService {
       localStorage.setItem(LOCAL_STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(seedData.announcements));
     }
     if (!localStorage.getItem(LOCAL_STORAGE_KEYS.EXAMS)) {
-       const examsFromSource = Object.entries(examSourceData).map(([name, data], index) => ({
-          id: `exam-${index + 1}`,
-          name,
-          ...data,
-          isActive: true
-       }));
-       localStorage.setItem(LOCAL_STORAGE_KEYS.EXAMS, JSON.stringify(examsFromSource));
+      const examsFromSource = Object.entries(examSourceData).map(([name, data], index) => ({
+        id: `exam-${index + 1}`,
+        name,
+        ...data,
+        isActive: true
+      }));
+      localStorage.setItem(LOCAL_STORAGE_KEYS.EXAMS, JSON.stringify(examsFromSource));
     }
     if (!localStorage.getItem(LOCAL_STORAGE_KEYS.ACTIVITY)) {
       localStorage.setItem(LOCAL_STORAGE_KEYS.ACTIVITY, JSON.stringify(seedData.activityFeed));
     }
-     if (!localStorage.getItem(LOCAL_STORAGE_KEYS.SUBSCRIPTION_TIERS)) {
+    if (!localStorage.getItem(LOCAL_STORAGE_KEYS.SUBSCRIPTION_TIERS)) {
       localStorage.setItem(LOCAL_STORAGE_KEYS.SUBSCRIPTION_TIERS, JSON.stringify(seedData.subscriptionTiers));
     }
     if (!localStorage.getItem(LOCAL_STORAGE_KEYS.TESTIMONIALS)) {
       localStorage.setItem(LOCAL_STORAGE_KEYS.TESTIMONIALS, JSON.stringify(seedData.testimonials));
     }
-     if (!localStorage.getItem(LOCAL_STORAGE_KEYS.LEADS)) {
+    if (!localStorage.getItem(LOCAL_STORAGE_KEYS.LEADS)) {
       localStorage.setItem(LOCAL_STORAGE_KEYS.LEADS, JSON.stringify([]));
     }
     if (!localStorage.getItem(LOCAL_STORAGE_KEYS.BLOG_POSTS)) {
@@ -55,42 +65,10 @@ class ApiService {
     }
   }
 
-  checkAndResetMonthlyLimits(user: User): User {
-    if (user.subscriptionTier !== 'STARTER' || !user.monthlyResetDate || Date.now() < user.monthlyResetDate) {
-      return user;
-    }
-    
-    // Time to reset
-    console.log(`Resetting monthly limits for ${user.email}`);
-    const updates = {
-      monthlyQuestionRemaining: 15,
-      monthlyExamUsage: {},
-      monthlyResetDate: Date.now() + 30 * 24 * 60 * 60 * 1000,
-    };
-    return this.updateUser(user.id, updates);
-  }
+  // ———————————————————————————————
+  // LOGIN / REGISTER / AUTH
+  // ———————————————————————————————
 
-  recordStarterUsage(userId: string, examName: string, numQuestions: number): User {
-    const users = this.getAllUsers();
-    const user = users.find(u => u.id === userId);
-
-    if (!user || user.subscriptionTier !== 'STARTER') {
-      return user || this.getCurrentUser()!;
-    }
-    
-    const newRemaining = (user.monthlyQuestionRemaining || 0) - numQuestions;
-    const newExamUsage = { 
-      ...(user.monthlyExamUsage || {}), 
-      [examName]: ((user.monthlyExamUsage || {})[examName] || 0) + numQuestions 
-    };
-
-    return this.updateUser(userId, {
-      monthlyQuestionRemaining: newRemaining,
-      monthlyExamUsage: newExamUsage,
-    });
-  }
-  
-  // --- Auth ---
   async login(email: string, password: string): Promise<User> {
     const users = this.getAllUsers();
     let user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
@@ -102,24 +80,25 @@ class ApiService {
     }
 
     user = this.checkAndResetMonthlyLimits(user);
-
     user.lastActive = Date.now();
+
     this.updateUser(user.id, { lastActive: user.lastActive });
     localStorage.setItem(LOCAL_STORAGE_KEYS.LOGGED_IN_USER, user.id);
     this.logActivity('login', 'logged in.', user.id, user.email);
+
     return user;
   }
-  
+
   async registerUser(fullName: string, email: string, password: string): Promise<User> {
     const users = this.getAllUsers();
     if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
-        throw new Error('An account with this email already exists.');
+      throw new Error('An account with this email already exists.');
     }
+
     const newUser = this.addUser({ fullName, email, password, role: 'USER' });
-    
-    // Automatically log in the new user
     localStorage.setItem(LOCAL_STORAGE_KEYS.LOGGED_IN_USER, newUser.id);
     this.logActivity('user_signup', 'created a new account.', newUser.id, newUser.email);
+
     return newUser;
   }
 
@@ -130,42 +109,51 @@ class ApiService {
   getCurrentUser(): User | null {
     const userId = localStorage.getItem(LOCAL_STORAGE_KEYS.LOGGED_IN_USER);
     if (!userId) return null;
+
     const users = this.getAllUsers();
     return users.find(u => u.id === userId) || null;
   }
 
-  // --- Users ---
+  // ———————————————————————————————
+  // USER MANAGEMENT
+  // ———————————————————————————————
+
   getAllUsers(): User[] {
     const usersFromStorage = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.USERS) || '[]') as Partial<User>[];
-    // Sanitize data to prevent errors from older localStorage schemas where array properties might be missing.
+
     return usersFromStorage.map(user => ({
       ...user,
       history: Array.isArray(user.history) ? user.history : [],
       unlockedExams: Array.isArray(user.unlockedExams) ? user.unlockedExams : [],
     })) as User[];
   }
-  
-  updateUser(userId: string, updates: Partial<User>, silent: boolean = false): User {
+
+  updateUser(userId: string, updates: Partial<User>, skipLog = false): User {
     let users = this.getAllUsers();
-    let userToUpdate: User | undefined;
+    let updatedUser: User | undefined;
+
     users = users.map(u => {
       if (u.id === userId) {
-        userToUpdate = { ...u, ...updates };
-        return userToUpdate;
+        updatedUser = { ...u, ...updates };
+        return updatedUser;
       }
       return u;
     });
-    if (!userToUpdate) throw new Error('User not found');
+
+    if (!updatedUser) throw new Error('User not found');
+
     localStorage.setItem(LOCAL_STORAGE_KEYS.USERS, JSON.stringify(users));
-    return userToUpdate;
+    return updatedUser;
   }
 
-  addUser(newUser: Omit<User, 'id' | 'subscriptionTier' | 'unlockedExams' | 'history' | 'inProgressQuiz' | 'createdAt' | 'lastActive' | 'monthlyQuestionRemaining' | 'monthlyExamUsage' | 'monthlyResetDate' | 'permissions' | 'subscriptionExpiresAt' | 'isSuspended' | 'paidUnlockSlots' | 'isNewUser' | 'referralCode' | 'accountCredit' | 'mustChangePassword'> & { role: Role }): User {
+  addUser(newUser: any): User {
     const users = this.getAllUsers();
     if (users.some(u => u.email.toLowerCase() === newUser.email.toLowerCase())) {
-        throw new Error('A user with this email already exists.');
+      throw new Error('A user with this email already exists.');
     }
+
     const now = Date.now();
+
     const user: User = {
       id: `user-${Date.now()}`,
       ...newUser,
@@ -184,344 +172,338 @@ class ApiService {
       monthlyExamUsage: {},
       monthlyResetDate: now + 30 * 24 * 60 * 60 * 1000,
     };
+
     users.push(user);
     localStorage.setItem(LOCAL_STORAGE_KEYS.USERS, JSON.stringify(users));
+
     return user;
   }
 
-  adminSetPassword(userId: string, newPassword: string): void {
-    if (newPassword.length < 6) {
-      throw new Error("Password must be at least 6 characters.");
-    }
-    this.updateUser(userId, {
-      password: newPassword,
-      mustChangePassword: true,
-    });
-  }
+  // ———————————————————————————————
+  // EXAM & CONTENT MANAGEMENT
+  // ———————————————————————————————
 
-  exportAllUsersAsCSV() {
-    const users = this.getAllUsers();
-    const headers = ['id', 'fullName', 'email', 'subscriptionTier', 'role', 'createdAt', 'lastActive'];
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + [headers.join(','), ...users.map(u => headers.map(h => JSON.stringify(u[h as keyof User])).join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "users_export.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }
-
-  // --- Marketing & Sales ---
-  async captureLead(email: string): Promise<void> {
-    const leads: string[] = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.LEADS) || '[]');
-    if (!leads.includes(email)) {
-        leads.push(email);
-        localStorage.setItem(LOCAL_STORAGE_KEYS.LEADS, JSON.stringify(leads));
-    }
-    this.logActivity('lead_captured', `captured lead: ${email}`, 'anonymous', 'anonymous');
-    console.log(`Lead captured: ${email}`);
-  }
-
-  getTestimonials(): Testimonial[] {
-      return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.TESTIMONIALS) || '[]');
-  }
-  
-  addTestimonial(author: string, quote: string): void {
-      const testimonials = this.getTestimonials();
-      const newTestimonial: Testimonial = {
-          id: `test-${Date.now()}`,
-          author,
-          quote
-      };
-      testimonials.push(newTestimonial);
-      localStorage.setItem(LOCAL_STORAGE_KEYS.TESTIMONIALS, JSON.stringify(testimonials));
-  }
-
-  // --- Blog / Content ---
-  getBlogPosts(): BlogPost[] {
-    return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.BLOG_POSTS) || '[]');
-  }
-  
-  getBlogPostBySlug(slug: string): BlogPost | undefined {
-    return this.getBlogPosts().find(p => p.slug === slug);
-  }
-
-
-  // --- Exams ---
   getExams(): Exam[] {
     return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.EXAMS) || '[]');
   }
+
   addExam(exam: Omit<Exam, 'id'>): Exam {
-      const exams = this.getExams();
-      const newExam: Exam = { id: `exam-${Date.now()}`, ...exam };
-      exams.push(newExam);
-      localStorage.setItem(LOCAL_STORAGE_KEYS.EXAMS, JSON.stringify(exams));
-      return newExam;
-  }
-  updateExam(examId: string, updates: Partial<Exam>): Exam {
-      let exams = this.getExams();
-      let updatedExam: Exam | undefined;
-      exams = exams.map(e => {
-          if (e.id === examId) {
-              updatedExam = { ...e, ...updates };
-              return updatedExam;
-          }
-          return e;
-      });
-      if (!updatedExam) throw new Error('Exam not found');
-      localStorage.setItem(LOCAL_STORAGE_KEYS.EXAMS, JSON.stringify(exams));
-      return updatedExam;
-  }
-  deleteExam(examId: string): void {
-      let exams = this.getExams();
-      exams = exams.filter(e => e.id !== examId);
-      localStorage.setItem(LOCAL_STORAGE_KEYS.EXAMS, JSON.stringify(exams));
+    const exams = this.getExams();
+    const newExam = { ...exam, id: `exam-${Date.now()}` };
+    exams.push(newExam);
+    localStorage.setItem(LOCAL_STORAGE_KEYS.EXAMS, JSON.stringify(exams));
+    return newExam;
   }
 
+  updateExam(id: string, updates: Partial<Exam>): Exam {
+    const exams = this.getExams();
+    const index = exams.findIndex(e => e.id === id);
+    if (index === -1) throw new Error('Exam not found');
+    exams[index] = { ...exams[index], ...updates };
+    localStorage.setItem(LOCAL_STORAGE_KEYS.EXAMS, JSON.stringify(exams));
+    return exams[index];
+  }
 
-  // --- Announcements ---
+  deleteExam(id: string): void {
+    const exams = this.getExams().filter(e => e.id !== id);
+    localStorage.setItem(LOCAL_STORAGE_KEYS.EXAMS, JSON.stringify(exams));
+  }
+
+  // ———————————————————————————————
+  // ANNOUNCEMENTS
+  // ———————————————————————————————
+  
   getAnnouncements(): Announcement[] {
     return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.ANNOUNCEMENTS) || '[]');
   }
-  addAnnouncement(ann: Omit<Announcement, 'id' | 'createdAt'>): Announcement {
-      const announcements = this.getAnnouncements();
-      const newAnn: Announcement = { id: `ann-${Date.now()}`, createdAt: Date.now(), ...ann };
-      announcements.push(newAnn);
-      localStorage.setItem(LOCAL_STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(announcements));
-      return newAnn;
-  }
-  updateAnnouncement(annId: string, updates: Partial<Announcement>): Announcement {
-      let announcements = this.getAnnouncements();
-      let updatedAnn: Announcement | undefined;
-      announcements = announcements.map(a => {
-          if (a.id === annId) {
-              updatedAnn = { ...a, ...updates };
-              return updatedAnn;
-          }
-          return a;
-      });
-      if (!updatedAnn) throw new Error('Announcement not found');
-      localStorage.setItem(LOCAL_STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(announcements));
-      return updatedAnn;
-  }
-  deleteAnnouncement(annId: string): void {
-      let announcements = this.getAnnouncements();
-      announcements = announcements.filter(a => a.id !== annId);
-      localStorage.setItem(LOCAL_STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(announcements));
+
+  addAnnouncement(announcement: Omit<Announcement, 'id' | 'createdAt'>): Announcement {
+    const list = this.getAnnouncements();
+    const newAnn = { ...announcement, id: `ann-${Date.now()}`, createdAt: Date.now() };
+    list.push(newAnn);
+    localStorage.setItem(LOCAL_STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(list));
+    return newAnn;
   }
 
-  // --- Subscriptions ---
+  updateAnnouncement(id: string, updates: Partial<Announcement>): void {
+    const list = this.getAnnouncements();
+    const index = list.findIndex(a => a.id === id);
+    if (index !== -1) {
+        list[index] = { ...list[index], ...updates };
+        localStorage.setItem(LOCAL_STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(list));
+    }
+  }
+
+  deleteAnnouncement(id: string): void {
+      const list = this.getAnnouncements().filter(a => a.id !== id);
+      localStorage.setItem(LOCAL_STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(list));
+  }
+
+  // ———————————————————————————————
+  // ACTIVITY & LOGGING
+  // ———————————————————————————————
+
+  fetchActivityFeed(): ActivityEvent[] {
+    const feed = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.ACTIVITY) || '[]');
+    return feed.sort((a: ActivityEvent, b: ActivityEvent) => b.timestamp - a.timestamp).slice(0, 50);
+  }
+
+  logActivity(type: any, message: string, userId: string, userEmail: string) {
+    const feed = this.fetchActivityFeed();
+    const newEvent = {
+        id: `evt-${Date.now()}-${Math.random()}`,
+        type,
+        message,
+        userId,
+        userEmail,
+        timestamp: Date.now()
+    };
+    feed.unshift(newEvent); // Add to beginning
+    // Keep only last 100 events to prevent LS overflow
+    const trimmedFeed = feed.slice(0, 100);
+    localStorage.setItem(LOCAL_STORAGE_KEYS.ACTIVITY, JSON.stringify(trimmedFeed));
+  }
+
+  // ———————————————————————————————
+  // SUBSCRIPTION TIERS & PAYMENT
+  // ———————————————————————————————
+  
   getSubscriptionTiers(): SubscriptionTierDetails[] {
-     return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.SUBSCRIPTION_TIERS) || '[]');
+      return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.SUBSCRIPTION_TIERS) || '[]');
   }
   
   upgradeSubscription(userId: string, tier: SubscriptionTier, slots: number): User {
-    const FOUR_MONTHS_IN_MS = 4 * 30 * 24 * 60 * 60 * 1000;
-    const updates = {
-      subscriptionTier: tier,
-      paidUnlockSlots: slots,
-      subscriptionExpiresAt: Date.now() + FOUR_MONTHS_IN_MS,
-      unlockedExams: [], // CRITICAL: Reset unlocks on upgrade/renewal
-    };
-    const user = this.updateUser(userId, updates);
-    this.logActivity('upgrade', `upgraded/renewed to ${tier} plan.`, userId, user.email);
-    return user;
+      // In a real app, this would process payment.
+      // Here we simulate a successful upgrade.
+      const now = Date.now();
+      const fourMonths = 4 * 30 * 24 * 60 * 60 * 1000;
+      
+      const user = this.updateUser(userId, {
+          subscriptionTier: tier,
+          paidUnlockSlots: slots,
+          subscriptionExpiresAt: now + fourMonths,
+          // If they are upgrading, we can reset their monthly starter limits (optional choice)
+          monthlyQuestionRemaining: null 
+      });
+      
+      this.logActivity('upgrade', `upgraded to ${tier} plan.`, userId, user.email);
+      return user;
   }
-
+  
   purchaseAdditionalUnlock(userId: string): User {
-    const currentUser = this.getAllUsers().find(u => u.id === userId);
-    if (!currentUser) throw new Error("User not found for purchase");
-
-    const updatedUser = this.updateUser(userId, { paidUnlockSlots: currentUser.paidUnlockSlots + 1 });
-    this.logActivity('one_time_unlock', 'purchased an additional exam slot.', userId, updatedUser.email);
-    return updatedUser;
+       // Simulate payment for 1 slot
+       const user = this.getAllUsers().find(u => u.id === userId);
+       if (!user) throw new Error("User not found");
+       
+       const newSlots = user.paidUnlockSlots + 1;
+       const updated = this.updateUser(userId, { paidUnlockSlots: newSlots });
+       this.logActivity('one_time_unlock', 'purchased an additional exam slot.', userId, user.email);
+       return updated;
   }
 
-  // --- Activity ---
-  fetchActivityFeed(): ActivityEvent[] {
-    return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.ACTIVITY) || '[]').sort((a: ActivityEvent, b: ActivityEvent) => b.timestamp - a.timestamp);
+  // ———————————————————————————————
+  // STARTER PLAN LIMITS
+  // ———————————————————————————————
+
+  checkAndResetMonthlyLimits(user: User): User {
+      if (user.subscriptionTier !== 'STARTER') return user;
+
+      const now = Date.now();
+      if (!user.monthlyResetDate || now > user.monthlyResetDate) {
+          // Reset limits
+          return this.updateUser(user.id, {
+              monthlyQuestionRemaining: 15,
+              monthlyExamUsage: {},
+              monthlyResetDate: now + 30 * 24 * 60 * 60 * 1000 // Next reset in 30 days
+          }, true);
+      }
+      return user;
   }
 
-  logActivity(type: ActivityEvent['type'], message: string, userId: string, userEmail: string) {
-    const feed = this.fetchActivityFeed();
-    const newEvent: ActivityEvent = {
-      id: `act-${Date.now()}`,
-      userId,
-      userEmail,
-      type,
-      message,
-      timestamp: Date.now(),
-    };
-    feed.unshift(newEvent);
-    localStorage.setItem(LOCAL_STORAGE_KEYS.ACTIVITY, JSON.stringify(feed.slice(0, 100))); // Keep last 100 events
+  recordStarterUsage(userId: string, examName: string, questionCount: number): User {
+      const user = this.getAllUsers().find(u => u.id === userId);
+      if (!user) throw new Error("User not found");
+
+      const currentUsage = user.monthlyExamUsage || {};
+      const currentExamCount = currentUsage[examName] || 0;
+      const currentRemaining = user.monthlyQuestionRemaining ?? 15;
+
+      const newUsage = { ...currentUsage, [examName]: currentExamCount + questionCount };
+      const newRemaining = Math.max(0, currentRemaining - questionCount);
+
+      return this.updateUser(userId, {
+          monthlyExamUsage: newUsage,
+          monthlyQuestionRemaining: newRemaining
+      }, true);
+  }
+  
+  // ———————————————————————————————
+  // ADMIN FUNCTIONS
+  // ———————————————————————————————
+  
+  adminSetPassword(userId: string, newPass: string) {
+      this.updateUser(userId, { password: newPass, mustChangePassword: true });
   }
 
-  // --- AI Generation ---
+  exportAllUsersAsCSV() {
+      const users = this.getAllUsers();
+      const headers = ['ID', 'Full Name', 'Email', 'Role', 'Tier', 'Created At', 'Last Active'];
+      const csvContent = [
+          headers.join(','),
+          ...users.map(u => [
+              u.id, 
+              `"${u.fullName || ''}"`, 
+              u.email, 
+              u.role, 
+              u.subscriptionTier, 
+              new Date(u.createdAt).toISOString(), 
+              new Date(u.lastActive).toISOString()
+          ].join(','))
+      ].join('\n');
+      
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', 'users_export.csv');
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+  }
+
+  // ———————————————————————————————
+  // AI QUESTION GENERATION
+  // ———————————————————————————————
+
   async generateQuestions(examName: string, numQuestions: number, topics?: string): Promise<Question[]> {
     const currentUser = this.getCurrentUser();
     if (!currentUser) {
-        throw new Error("No user is currently logged in. Please log in to generate a quiz.");
+      throw new Error("No user is logged in.");
     }
-    
+
     const examData = this.getExams().find(e => e.name === examName);
-    if (!examData) {
-      throw new Error("Exam data not found.");
-    }
-    
-    this.logActivity('quiz_start', `started a ${numQuestions}-question quiz for ${examName}.`, currentUser.id, currentUser.email);
-    
+    if (!examData) throw new Error("Exam data not found.");
+
     const { bodyOfKnowledge, effectivitySheet } = examData;
 
-    const questionSchema = {
-      type: Type.OBJECT,
-      properties: {
-        question: { type: Type.STRING, description: "The question text. Must be challenging and based on the provided documents." },
-        type: { type: Type.STRING, enum: ['multiple-choice', 'true-false'], description: "The type of question." },
-        options: { 
-          type: Type.ARRAY, 
-          items: { type: Type.STRING }, 
-          description: "An array of 4 strings for multiple-choice options. For true-false questions, this should be an empty array or not present." 
-        },
-        answer: { type: Type.STRING, description: "The correct answer. For multiple-choice, it must exactly match one of the options. For true-false, it must be 'True' or 'False'." },
-        reference: { type: Type.STRING, description: "A specific citation from the source documents (e.g., 'API 510, Section 5.3.2' or 'ASME Section IX, QW-100')." },
-        explanation: { type: Type.STRING, description: "A detailed rationale explaining why the answer is correct and the other options are incorrect, citing the reference document." },
-        category: { type: Type.STRING, description: "A relevant category from the Body of Knowledge (e.g., 'Welding', 'NDE', 'Corrosion Rates')." },
-      },
-      required: ['question', 'type', 'answer', 'reference', 'explanation', 'category']
-    };
+    // Use a simpler model for generation to ensure availability
+    const modelName = 'gemini-2.5-flash';
 
-    const prompt = `You are an expert API (American Petroleum Institute) exam author, creating a practice test for the "${examName}" certification. Your task is to generate ${numQuestions} exam-caliber questions based *exclusively* on the provided official documents.
-
-    **Key Instructions for Realism:**
-    1.  **Source Adherence:** Your primary goal is to base every question and its answer options strictly on the provided Body of Knowledge and Effectivity Sheet. Do not use outside knowledge.
-    2.  **CRITICAL RULE:** Never use the phrases 'Body of Knowledge' or 'Effectivity Sheet' in the text of the questions you generate. The questions must feel authentic, as if they are from a real exam, which would never refer to its own source syllabus documents.
-    3.  **Question Style:**
-        *   **Tone:** Use formal, direct, and unambiguous language.
-        *   **Format:** Prioritize direct recall questions (e.g., "What is...", "Which of the following...") and sentence-completion formats (e.g., "A relief valve begins to open when..."). Avoid long, narrative scenarios.
-        *   **Negative Phrasing:** Occasionally, use negative phrasing like "...all of the following are true EXCEPT:".
-    4.  **Answer & Distractors:**
-        *   For multiple-choice, create four options.
-        *   One option must be verifiably correct based on the source text.
-        *   The three incorrect "distractor" options must be plausible and use related terminology from the industry or source documents. They should test for precise knowledge.
-        *   Ensure all options have a similar length and parallel grammatical structure.
-    5.  **Reference & Explanation:** Every question MUST include a specific citation to the source document (e.g., "API 510, 7.4.2") and a detailed explanation for why the correct answer is correct.
-    6.  **Topic Focus:** ${topics ? `Prioritize questions related to these topics: ${topics}.` : 'Cover a broad range of topics from the Body of Knowledge.'}
-    7.  **Format:** Return the output as a JSON array of question objects.
-
-    **Body of Knowledge:**
-    ---
-    ${bodyOfKnowledge}
-    ---
-
-    **Effectivity Sheet (Referenced Codes & Standards):**
-    ---
-    ${effectivitySheet}
-    ---
-    
-    Now, generate the ${numQuestions} questions, perfectly matching the style of a real API certification exam.`;
+    const prompt = `
+      You are an expert exam question generator for the ${examName} certification.
+      Generate ${numQuestions} multiple-choice questions.
+      
+      Context:
+      ${topics ? `Focus strictly on these topics: ${topics}` : `Cover a representative mix of topics from the Body of Knowledge.`}
+      
+      Reference Material Context (Do not strictly limit to this, but use as guide):
+      ${bodyOfKnowledge.substring(0, 500)}...
+      
+      Format: Return ONLY a JSON array. Each object must have:
+      - question (string)
+      - type (string: "multiple-choice" or "true-false")
+      - options (array of 4 strings)
+      - answer (string, must match one option exactly)
+      - reference (string, cite specific code section if possible)
+      - explanation (string, brief rationale)
+      - category (string, topic area)
+    `;
 
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-pro',
+        model: modelName,
         contents: prompt,
         config: {
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.ARRAY,
-            items: questionSchema,
-          },
-          temperature: 0.8,
-        },
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                question: { type: Type.STRING },
+                type: { type: Type.STRING },
+                options: { type: Type.ARRAY, items: { type: Type.STRING }},
+                answer: { type: Type.STRING },
+                reference: { type: Type.STRING },
+                explanation: { type: Type.STRING },
+                category: { type: Type.STRING },
+              },
+              required: ['question','type','options','answer','reference','explanation','category']
+            }
+          }
+        }
       });
-      
+
       const text = response.text?.trim();
-
       if (!text) {
-        throw new Error("The AI model returned an empty response. This might be due to a content filter or temporary API issue. Please try again.");
-      }
-      
-      let questions: Question[];
-      try {
-        questions = JSON.parse(text);
-        if (!Array.isArray(questions)) {
-            throw new Error("Response was not in the expected array format.");
-        }
-      } catch (parseError) {
-        console.error("Failed to parse JSON from AI response:", text);
-        if (text.toLowerCase().includes("cannot fulfill") || text.toLowerCase().includes("i am unable")) {
-             throw new Error("The AI model was unable to generate questions for this topic, possibly due to a safety policy. Please try different topics or a more general quiz.");
-        }
-        throw new Error("The AI model returned a response that was not in the expected format. Please try generating the quiz again.");
+        throw new Error("Empty response from AI.");
       }
 
-      if (questions.length === 0) {
-        return [];
-      }
-
-      // Data validation and cleanup
-      return questions.map(q => ({
+      const questions = JSON.parse(text);
+      return questions.map((q: any) => ({
         ...q,
+        // Ensure options don't exceed 4 for MC
         options: q.type === 'multiple-choice' ? q.options?.slice(0, 4) : undefined,
       })).slice(0, numQuestions);
 
-    } catch (error) {
-      console.error("Error generating questions:", error);
-      
-      // Re-throw our custom, user-friendly errors from the parsing logic
-      if (error instanceof Error && error.message.startsWith("The AI model")) {
-          throw error; 
-      }
-
-      // Check for specific API error messages
-      if (error instanceof Error) {
-        const message = error.message.toLowerCase();
-        if (message.includes('api key not valid')) {
-          throw new Error("API Key Invalid: The configured API key is not valid. Please contact support to resolve this issue.");
-        }
-        if (message.includes('billing') || message.includes('quota')) {
-          throw new Error("Billing/Quota Issue: The API key has exceeded its quota or is not linked to an active billing account. Please contact support.");
-        }
-        if (message.includes('resource has been exhausted')) {
-           throw new Error("Service Overloaded: The AI model is currently experiencing high demand. Please try again in a few moments.");
-        }
-      }
-
-      // Generic fallback error
-      throw new Error("Failed to generate quiz questions. The AI model may be temporarily unavailable or the request may have timed out. Please try again later.");
+    } catch (err: any) {
+      console.error("AI Generation Error:", err);
+      // Fallback message if AI fails (e.g., quota or network)
+      throw new Error(`Failed to generate questions: ${err.message || 'Unknown error'}`);
     }
   }
 
   async getFollowUpAnswer(question: Question, query: string): Promise<string> {
-    const prompt = `A user is studying for an exam and has a follow-up question about a practice problem.
+      try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `
+                Context: A user is taking a quiz for a certification exam.
+                Original Question: "${question.question}"
+                Correct Answer: "${question.answer}"
+                Explanation: "${question.explanation}"
+                
+                User Query: "${query}"
+                
+                Please provide a helpful, concise answer to the user's query to help them understand the concept. Act as a supportive tutor.
+            `
+        });
+        return response.text || "I couldn't generate an answer at this time.";
+      } catch (err) {
+          console.error(err);
+          return "Sorry, I encountered an error trying to answer that.";
+      }
+  }
 
-    **Original Question:**
-    ${question.question}
-    ${question.options ? `Options: ${question.options.join(', ')}` : ''}
-    
-    **Correct Answer:**
-    ${question.answer}
+  // ———————————————————————————————
+  // PUBLIC CONTENT (BLOG, TESTIMONIALS)
+  // ———————————————————————————————
 
-    **Explanation Provided:**
-    ${question.explanation}
-    (Reference: ${question.reference})
-
-    **User's Follow-up Query:**
-    "${query}"
-
-    Please provide a clear, concise, and helpful answer to the user's query, acting as a friendly and knowledgeable tutor. Base your answer on the context of the original question and its explanation.`;
-
-    try {
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-      });
-      return response.text || "I'm sorry, I couldn't generate a response at this time.";
-    } catch (error) {
-      console.error("Error getting follow-up answer:", error);
-      throw new Error("Failed to get an answer. The AI model may be temporarily unavailable.");
-    }
+  getTestimonials(): Testimonial[] {
+      return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.TESTIMONIALS) || '[]');
+  }
+  
+  addTestimonial(author: string, quote: string) {
+      const list = this.getTestimonials();
+      list.push({ id: `t-${Date.now()}`, author, quote });
+      localStorage.setItem(LOCAL_STORAGE_KEYS.TESTIMONIALS, JSON.stringify(list));
+  }
+  
+  captureLead(email: string) {
+      const leads = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.LEADS) || '[]');
+      leads.push({ email, date: Date.now() });
+      localStorage.setItem(LOCAL_STORAGE_KEYS.LEADS, JSON.stringify(leads));
+      this.logActivity('lead_captured', 'captured a new lead magnet download.', 'visitor', email);
+  }
+  
+  getBlogPosts(): BlogPost[] {
+      return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.BLOG_POSTS) || '[]');
+  }
+  
+  getBlogPostBySlug(slug: string): BlogPost | undefined {
+      const posts = this.getBlogPosts();
+      return posts.find(p => p.slug === slug);
   }
 }
 
