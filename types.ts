@@ -1,42 +1,41 @@
-import { GoogleGenAI } from "@google/genai";
+export type SubscriptionTier = "Starter" | "Professional" | "Specialist";
+export type UserRole = "user" | "admin";
+export type ExamMode = "open-book" | "closed-book" | "simulation";
+export type QuestionDifficulty = "easy" | "medium" | "hard";
 
-export type SubscriptionTier = 'STARTER' | 'PROFESSIONAL' | 'SPECIALIST';
-export type Role = 'USER' | 'SUB_ADMIN' | 'ADMIN';
-
-export type QuestionType = 'multiple-choice' | 'true-false';
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  password: string;
+  role: UserRole;
+  subscriptionTier: SubscriptionTier;
+  paidUnlockSlots: number;
+  monthlyQuestionRemaining: number;
+  monthlyExamUsage: Record<string, number>;
+  createdAt: number;
+  lastLoginAt: number;
+}
 
 export interface Question {
+  id: string;
   question: string;
-  type: QuestionType;
-  options?: string[]; // Optional for True/False questions
-  answer: string;
-  reference?: string;
+  options: string[];
+  correctAnswer: string;
   explanation?: string;
-  category?: string;
+  category: string;
+  difficulty?: QuestionDifficulty;
+  codeReference?: string;
+  examName?: string;
 }
 
 export interface QuizSettings {
   examName: string;
   numQuestions: number;
-  isTimed: boolean;
-  examMode: 'open' | 'closed' | 'simulation';
-  topics?: string;
-}
-
-export interface UserAnswer {
-  question: string;
-  options?: string[]; // Optional for True/False questions
-  answer: string;
-  userAnswer: string;
-  isCorrect: boolean;
-  category?: string;
-  confidence?: 'guess' | 'sure' | 'confident';
-}
-
-export interface InProgressAnswer {
-  userAnswer: string | null;
-  flagged: boolean;
-  strikethroughOptions: string[];
+  examMode: ExamMode;
+  timeLimit?: number;
+  allowCalculator: boolean;
+  allowCodeReference: boolean;
 }
 
 export interface QuizResult {
@@ -44,90 +43,20 @@ export interface QuizResult {
   userId: string;
   examName: string;
   score: number;
+  correctAnswers: number;
   totalQuestions: number;
-  percentage: number;
-  date: number; // timestamp
-  userAnswers: UserAnswer[];
-}
-
-export interface InProgressQuizState {
-  questions: Question[];
-  answers: InProgressAnswer[];
-  currentQuestionIndex: number;
-  quizSettings: QuizSettings;
-  startTime: number;
-  timeRemaining: number;
-  isSimulationIntermission: boolean;
-}
-
-export interface SubAdminPermissions {
-    canViewUserList: boolean;
-    canEditUsers: boolean;
-    canSendPasswordResets: boolean;
-    canManageAnnouncements: boolean;
-    canManageExams: boolean;
-    canAccessPerformanceAnalytics: boolean;
-    canViewBillingSummary: boolean;
-    canManageSubscriptions: boolean;
-    canViewActivityLogs: boolean;
-    canSuspendUsers: boolean;
-}
-
-export interface User {
-  id: string;
-  fullName?: string;
-  email: string;
-  phoneNumber?: string;
-  password?: string; // Should be handled securely on a real backend
-  subscriptionTier: SubscriptionTier;
-  subscriptionExpiresAt?: number;
-  unlockedExams: string[];
-  history: QuizResult[];
-  inProgressQuiz?: InProgressQuizState | null;
-  role: Role;
-  permissions?: SubAdminPermissions;
-  createdAt: number;
-  lastActive: number;
-  isSuspended?: boolean;
-  // Fields for Monthly Question Bank for STARTER users
-  monthlyQuestionRemaining?: number | null;
-  monthlyExamUsage?: { [examName: string]: number } | null;
-  monthlyResetDate?: number | null;
-}
-
-export type ActivityEventType = 'login' | 'upgrade' | 'unlock' | 'one_time_unlock' | 'quiz_complete';
-
-export interface ActivityEvent {
-  id: string;
-  userId: string;
-  userEmail: string;
-  type: ActivityEventType;
-  message: string;
+  timeSpent?: number;
   timestamp: number;
+  answers: string[];
+  examMode: ExamMode;
+  categoryScores?: Record<string, { correct: number; total: number }>;
 }
 
-export interface Exam {
-    id: string;
-    name: string;
-    effectivitySheet: string;
-    bodyOfKnowledge: string;
-    isActive: boolean;
-}
-
-export interface Announcement {
-    id: string;
-    message: string;
-    isActive: boolean;
-    createdAt: number;
-}
-
-export interface SubscriptionTierDetails {
-  tier: SubscriptionTier;
-  name: string;
-  price: string;
-  description: string;
-  features: string[];
-  cta?: string;
-  isPopular?: boolean;
-  isDeemphasized?: boolean;
+export interface AdminStats {
+  totalUsers: number;
+  activeUsers: number;
+  totalExams: number;
+  averageScore: number;
+  revenueThisMonth: number;
+  subscriptionBreakdown: Record<SubscriptionTier, number>;
 }
