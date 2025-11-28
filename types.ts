@@ -1,5 +1,3 @@
-import { GoogleGenAI } from "@google/genai";
-
 export type SubscriptionTier = 'STARTER' | 'PROFESSIONAL' | 'SPECIALIST';
 export type Role = 'USER' | 'SUB_ADMIN' | 'ADMIN';
 

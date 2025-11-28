@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { 
-  User, Question, ActivityEvent, Exam, Announcement, SubscriptionTierDetails, 
+  User, Question, ActivityEvent, ActivityEventType, Exam, Announcement, SubscriptionTierDetails, 
   Role, QuizResult, InProgressQuizState, InProgressAnswer, UserAnswer, 
   SubscriptionTier, Testimonial, BlogPost 
 } from '../types';
@@ -146,7 +146,7 @@ class ApiService {
     return updatedUser;
   }
 
-  addUser(newUser: any): User {
+  addUser(newUser: { fullName: string; email: string; password: string; role: Role }): User {
     const users = this.getAllUsers();
     if (users.some(u => u.email.toLowerCase() === newUser.email.toLowerCase())) {
       throw new Error('A user with this email already exists.');
@@ -248,7 +248,7 @@ class ApiService {
     return feed.sort((a: ActivityEvent, b: ActivityEvent) => b.timestamp - a.timestamp).slice(0, 50);
   }
 
-  logActivity(type: any, message: string, userId: string, userEmail: string) {
+  logActivity(type: ActivityEventType, message: string, userId: string, userEmail: string) {
     const feed = this.fetchActivityFeed();
     const newEvent = {
         id: `evt-${Date.now()}-${Math.random()}`,
