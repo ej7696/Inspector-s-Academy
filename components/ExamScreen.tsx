@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Question, QuizSettings, InProgressAnswer, User } from '../types';
-import { FlagIcon, StrikethroughIcon, PreviousIcon, NextIcon, NavigatorIcon, ClockIcon, ExitIcon, CalculatorIcon } from './ExamIcons';
+import { FlagIcon, StrikethroughIcon, PreviousIcon, NextIcon, NavigatorIcon, ClockIcon, ExitIcon, CalculatorIcon, SpeakerIcon, StopIcon } from './ExamIcons';
 import Calculator from './Calculator';
 
 interface Props {
@@ -15,13 +15,14 @@ interface Props {
   onToggleStrikethrough: (option: string) => void;
   onSubmit: () => void;
   onSaveAndExit: (time: number) => void;
+  onAutoSave: (answers: InProgressAnswer[], time: number) => void;
   onAskFollowUp: (question: Question, query: string) => void;
   followUpAnswer: string;
   isFollowUpLoading: boolean;
 }
 
 const ExamScreen: React.FC<Props> = ({
-  user, questions, quizSettings, currentIndex, answers, onSelectAnswer, onNavigate, onToggleFlag, onToggleStrikethrough, onSubmit, onSaveAndExit,
+  user, questions, quizSettings, currentIndex, answers, onSelectAnswer, onNavigate, onToggleFlag, onToggleStrikethrough, onSubmit, onSaveAndExit, onAutoSave,
   onAskFollowUp, followUpAnswer, isFollowUpLoading
 }) => {
   const [isNavigatorVisible, setIsNavigatorVisible] = useState(false);
@@ -29,6 +30,12 @@ const ExamScreen: React.FC<Props> = ({
   const [timeLeft, setTimeLeft] = useState(quizSettings.numQuestions * 90); // 1.5 mins per question
   const [showExplanation, setShowExplanation] = useState(false);
   const [followUpQuery, setFollowUpQuery] = useState('');
+  
+  // TTS State
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  
+  // FIX: Replace NodeJS.Timeout with number for browser compatibility.
+  const autoSaveTimeout = useRef<number | null>(null);
 
   const currentQuestion = questions[currentIndex];
   const currentAnswer = answers[currentIndex];
@@ -42,7 +49,22 @@ const ExamScreen: React.FC<Props> = ({
   useEffect(() => {
     setShowExplanation(false);
     setFollowUpQuery('');
+    
+    // Stop speaking when changing questions (important for UX)
+    if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+        setIsSpeaking(false);
+    }
   }, [currentIndex]);
+  
+  useEffect(() => {
+    // Cleanup on unmount
+    return () => {
+        if (window.speechSynthesis) {
+            window.speechSynthesis.cancel();
+        }
+    };
+  }, []);
   
   useEffect(() => {
     if (!quizSettings.isTimed) return;
@@ -70,6 +92,23 @@ const ExamScreen: React.FC<Props> = ({
     }, 1000);
     return () => clearInterval(timer);
   }, [quizSettings.isTimed, onSubmit]);
+  
+  // Auto-save logic
+  useEffect(() => {
+    // Debounce the save operation
+    if (autoSaveTimeout.current) {
+        clearTimeout(autoSaveTimeout.current);
+    }
+    autoSaveTimeout.current = window.setTimeout(() => {
+        onAutoSave(answers, timeLeft);
+    }, 5000); // Save every 5 seconds after the last change
+
+    return () => {
+        if (autoSaveTimeout.current) {
+            clearTimeout(autoSaveTimeout.current);
+        }
+    };
+  }, [answers, timeLeft, onAutoSave]);
 
   const formatTime = (seconds: number) => {
     const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
@@ -82,6 +121,35 @@ const ExamScreen: React.FC<Props> = ({
     if (followUpQuery.trim()) {
         onAskFollowUp(currentQuestion, followUpQuery);
     }
+  };
+
+  const toggleReadAloud = () => {
+    if (isSpeaking) {
+        window.speechSynthesis.cancel();
+        setIsSpeaking(false);
+        return;
+    }
+
+    const textToRead = `Question ${currentIndex + 1}. ${currentQuestion.question}. ${
+        currentQuestion.options 
+        ? `Options: ${currentQuestion.options.map((opt, i) => `${String.fromCharCode(65 + i)}. ${opt}`).join('. ')}` 
+        : `True or False.`
+    }`;
+
+    const utterance = new SpeechSynthesisUtterance(textToRead);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    
+    utterance.onend = () => {
+        setIsSpeaking(false);
+    };
+    
+    utterance.onerror = () => {
+        setIsSpeaking(false);
+    };
+
+    window.speechSynthesis.speak(utterance);
+    setIsSpeaking(true);
   };
 
   const getQuestionStatusClass = (index: number) => {
@@ -142,6 +210,17 @@ const ExamScreen: React.FC<Props> = ({
               <span className="hidden sm:inline">{formatTime(timeLeft)}</span>
             </div>
           )}
+          
+          {/* Commute Mode Button */}
+          <button 
+             onClick={toggleReadAloud} 
+             className={`p-2 rounded-md hover:bg-gray-200 flex items-center gap-1 ${isSpeaking ? 'text-blue-600 bg-blue-50' : 'text-gray-600'}`} 
+             title={isSpeaking ? "Stop Reading" : "Read Aloud (Commute Mode)"}
+          >
+             {isSpeaking ? <StopIcon className="w-5 h-5" /> : <SpeakerIcon className="w-5 h-5"/>}
+             <span className="hidden md:inline text-sm font-semibold">{isSpeaking ? 'Stop' : 'Read'}</span>
+          </button>
+
           <button onClick={() => setIsCalculatorOpen(true)} className="p-2 rounded-md hover:bg-gray-200" title="Open Calculator">
              <CalculatorIcon className="w-5 h-5 text-gray-600"/>
           </button>

@@ -136,6 +136,23 @@ const UserProfile: React.FC<Props> = ({ user, onUpdateUser, onGoHome, onViewDash
               </button>
           </div>
       </div>
+      
+      {/* Referral Program */}
+       <div className="bg-white p-6 rounded-lg shadow-md">
+        <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Referral Program</h2>
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div>
+                <p className="font-semibold text-blue-800">Share your referral code:</p>
+                <p className="text-2xl font-bold text-blue-600 tracking-wider bg-white px-3 py-1 rounded-md inline-block my-2">{user.referralCode}</p>
+                <p className="text-sm text-blue-700">Give a colleague 10% off their first purchase, and you'll get a $25 credit!</p>
+            </div>
+            <div className="text-center">
+                <p className="text-sm font-medium text-gray-500">Your Credit</p>
+                <p className="text-3xl font-bold text-green-600">${user.accountCredit?.toFixed(2) || '0.00'}</p>
+            </div>
+        </div>
+       </div>
+
 
       {/* Practice History Summary */}
       <div className="bg-white p-6 rounded-lg shadow-md">

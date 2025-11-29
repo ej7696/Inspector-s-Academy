@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { QuizResult } from '../types';
+import TestimonialCollector from './TestimonialCollector';
 
 interface Props {
   result: QuizResult;
@@ -11,7 +12,17 @@ interface Props {
 }
 
 const ScoreScreen: React.FC<Props> = ({ result, onRestart, onGoHome, isPro, onViewDashboard, onRegenerate }) => {
+  const [showTestimonialCollector, setShowTestimonialCollector] = useState(false);
   const scoreColor = result.percentage >= 70 ? 'text-green-600' : 'text-red-600';
+
+  useEffect(() => {
+    // Prompt for testimonial on high scores
+    if (result.percentage >= 90) {
+      const timer = setTimeout(() => setShowTestimonialCollector(true), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [result.percentage]);
+
 
   const topicPerformance = useMemo(() => {
     const statsByCategory: { [key: string]: { correct: number; total: number } } = {};
@@ -48,6 +59,7 @@ const ScoreScreen: React.FC<Props> = ({ result, onRestart, onGoHome, isPro, onVi
   }, [result]);
 
   return (
+    <>
     <div className="max-w-4xl mx-auto my-10 p-8 bg-white rounded-lg shadow-xl">
       <div className="text-center border-b pb-6 mb-6">
         <h1 className="text-3xl font-bold text-gray-800 mb-2">Quiz Complete!</h1>
@@ -138,8 +150,9 @@ const ScoreScreen: React.FC<Props> = ({ result, onRestart, onGoHome, isPro, onVi
           ))}
         </ul>
       </div>
-
     </div>
+    {showTestimonialCollector && <TestimonialCollector onClose={() => setShowTestimonialCollector(false)} />}
+    </>
   );
 };
 

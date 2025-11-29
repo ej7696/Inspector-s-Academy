@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { User, InProgressQuizState, Exam, Announcement } from '../types';
 import api from '../services/apiService';
 import ProgressRing from './ProgressRing';
+import WelcomeOfferBanner from './WelcomeOfferBanner';
 
 interface Props {
   user: User;
@@ -13,10 +14,11 @@ interface Props {
   onUpgrade: () => void;
   onResumeQuiz: (progress: InProgressQuizState) => void;
   onAbandonQuiz: () => void;
+  onInitiateUnlockPurchase: (examName: string, price: string) => void;
 }
 
 const HomePage: React.FC<Props> = ({ 
-  user, onStartQuiz, onViewDashboard, onViewProfile, onViewAdmin, onLogout, onUpgrade, onResumeQuiz, onAbandonQuiz 
+  user, onStartQuiz, onViewDashboard, onViewProfile, onViewAdmin, onLogout, onUpgrade, onResumeQuiz, onAbandonQuiz, onInitiateUnlockPurchase
 }) => {
   const [exams, setExams] = useState<Exam[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -44,6 +46,24 @@ const HomePage: React.FC<Props> = ({
     };
     fetchData();
   }, []);
+  
+  const availableQuestionsForStarter = useMemo(() => {
+    if (user.subscriptionTier !== 'STARTER' || !selectedExam) {
+      return null;
+    }
+    const perExamLimit = 2;
+    const usageForSelectedExam = user.monthlyExamUsage?.[selectedExam.name] || 0;
+    const remainingForExam = Math.max(0, perExamLimit - usageForSelectedExam);
+    const totalMonthlyRemaining = user.monthlyQuestionRemaining ?? 0;
+    
+    return Math.min(totalMonthlyRemaining, remainingForExam);
+  }, [user, selectedExam]);
+
+  useEffect(() => {
+    if (user.subscriptionTier === 'STARTER') {
+      setNumQuestions(availableQuestionsForStarter ?? 0);
+    }
+  }, [user.subscriptionTier, availableQuestionsForStarter]);
 
   const filteredExams = useMemo(() => {
     return exams.filter(exam =>
@@ -58,6 +78,11 @@ const HomePage: React.FC<Props> = ({
   };
   
   const getButtonProps = () => {
+    if (user.subscriptionTier === 'STARTER' && selectedExam) {
+      if ((availableQuestionsForStarter ?? 0) <= 0) {
+        return { text: 'Limit Reached', disabled: true };
+      }
+    }
     return { text: 'Start Quiz', disabled: !selectedExam };
   };
 
@@ -79,6 +104,10 @@ const HomePage: React.FC<Props> = ({
       if (relevantHistory.length === 0) return 0;
       return Math.max(...relevantHistory.map(h => h.percentage));
   };
+
+  const isSubscriptionActive = user.subscriptionTier !== 'STARTER' && user.subscriptionExpiresAt ? Date.now() < user.subscriptionExpiresAt : false;
+  
+  const isWithinWelcomeOffer = user.subscriptionTier === 'STARTER' && (Date.now() - user.createdAt < 48 * 60 * 60 * 1000);
 
 
   if (isLoading) {
@@ -106,6 +135,7 @@ const HomePage: React.FC<Props> = ({
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6">
+        {isWithinWelcomeOffer && <WelcomeOfferBanner onUpgrade={onUpgrade} />}
         <div className="flex items-center gap-4 mb-6">
             {announcements.length > 0 ? (
                 <div className="flex-grow bg-indigo-600 text-white p-4 rounded-lg text-center shadow-lg">
@@ -147,14 +177,15 @@ const HomePage: React.FC<Props> = ({
                 const isUnlocked = user.unlockedExams.includes(exam.name);
                 const isSelected = selectedExam?.id === exam.id;
                 const mastery = getMasteryScore(exam.name);
+                const canUnlockMore = user.paidUnlockSlots > user.unlockedExams.length;
 
                 return (
                   <li
                     key={exam.id}
                     onClick={() => setSelectedExam(exam)}
-                    className={`p-4 flex items-center justify-between rounded-lg border-2 cursor-pointer transition-all ${
-                      isSelected ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-gray-200 bg-white hover:bg-gray-50'
-                    }`}
+                    className={`p-4 flex items-center justify-between rounded-lg border-2 transition-all ${
+                      isSelected ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-gray-200 bg-white'
+                    } ${!isSelected && (isUnlocked || user.subscriptionTier === 'STARTER') ? 'hover:bg-gray-50 cursor-pointer' : ''}`}
                   >
                     <div>
                         <p className="font-semibold text-lg text-gray-800">{exam.name}</p>
@@ -166,11 +197,24 @@ const HomePage: React.FC<Props> = ({
                             <ProgressRing score={mastery} />
                             <span>Unlocked</span>
                          </div>
-                       ) : (
+                       ) : canUnlockMore ? (
                          <div className="text-sm text-gray-500 font-medium flex items-center gap-1">
                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" /></svg>
                            <span>Locked</span>
                          </div>
+                       ) : (
+                         <button 
+                           onClick={(e) => {
+                             e.stopPropagation(); // Prevent li onClick from firing
+                             onInitiateUnlockPurchase(exam.name, '$250');
+                           }}
+                           disabled={!isSubscriptionActive}
+                           className={`text-sm font-bold px-3 py-1 rounded-full transition-colors ${
+                               !isSubscriptionActive ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-green-500 text-white hover:bg-green-600'
+                           }`}
+                         >
+                           {isSubscriptionActive ? 'Unlock for $250' : 'Renew to Unlock'}
+                         </button>
                        )
                     )}
                   </li>
@@ -182,10 +226,33 @@ const HomePage: React.FC<Props> = ({
         <div className="space-y-6">
             <div className="bg-white p-6 rounded-lg shadow-md">
                 <h2 className="text-xl font-bold text-gray-800 mb-4">Quiz Settings</h2>
+                 {user.subscriptionTier === 'STARTER' && (
+                    <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+                        <p><b>Starter Plan Limits:</b></p>
+                        <p>Questions remaining this month: <b>{user.monthlyQuestionRemaining ?? 15} / 15</b></p>
+                        {selectedExam && <p>Questions used for "{selectedExam.name}": <b>{user.monthlyExamUsage?.[selectedExam.name] || 0} / 2</b></p>}
+                    </div>
+                )}
                 <div className="space-y-5">
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Number of Questions: {numQuestions}</label>
-                        <input type="range" min="5" max="120" step="5" value={numQuestions} onChange={e => setNumQuestions(Number(e.target.value))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" disabled={!selectedExam}/>
+                        <input 
+                            type="range" 
+                            min="1" 
+                            max="120" 
+                            step="1" 
+                            value={numQuestions} 
+                            onChange={e => setNumQuestions(Number(e.target.value))} 
+                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed" 
+                            disabled={!selectedExam || user.subscriptionTier === 'STARTER'}
+                        />
+                         {user.subscriptionTier === 'STARTER' && (
+                            <p className="text-xs text-gray-500 mt-1">
+                                {selectedExam
+                                ? `You have ${availableQuestionsForStarter} sample question(s) available for this exam.`
+                                : `The Starter plan includes up to a 2-question sample for each certification.`}
+                            </p>
+                        )}
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Focus on Specific Topics (Optional)</label>
@@ -212,7 +279,11 @@ const HomePage: React.FC<Props> = ({
                     {(user.role === 'ADMIN' || user.role === 'SUB_ADMIN') && (
                         <button onClick={onViewAdmin} className="w-full text-left py-2 px-3 bg-yellow-100 hover:bg-yellow-200 text-yellow-800 rounded-md transition font-medium">Admin Panel</button>
                     )}
-                    <button onClick={onUpgrade} className="w-full text-left py-2 px-3 bg-green-100 hover:bg-green-200 text-green-800 rounded-md transition font-medium">Upgrade Plan</button>
+                    {user.subscriptionTier === 'STARTER' ? (
+                      <button onClick={onUpgrade} className="w-full text-left py-2 px-3 bg-green-100 hover:bg-green-200 text-green-800 rounded-md transition font-medium">Upgrade Plan</button>
+                    ) : !isSubscriptionActive && (
+                      <button onClick={onUpgrade} className="w-full text-left py-2 px-3 bg-yellow-100 hover:bg-yellow-200 text-yellow-800 rounded-md transition font-medium">Renew Subscription</button>
+                    )}
                 </div>
             </div>
         </div>

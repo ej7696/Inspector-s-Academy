@@ -110,12 +110,14 @@ const ProfessionalDashboard: React.FC<{ user: User, onGoHome: () => void, onStar
     const weaknessAnalysis = useMemo(() => {
         const categoryStats: { [key: string]: { correct: number; total: number } } = {};
         examHistory.forEach(result => {
-          result.userAnswers.forEach(ua => {
-            const category = ua.category || 'Uncategorized';
-            if (!categoryStats[category]) categoryStats[category] = { correct: 0, total: 0 };
-            categoryStats[category].total++;
-            if (ua.isCorrect) categoryStats[category].correct++;
-          });
+          if (Array.isArray(result.userAnswers)) {
+            result.userAnswers.forEach(ua => {
+              const category = ua.category || 'Uncategorized';
+              if (!categoryStats[category]) categoryStats[category] = { correct: 0, total: 0 };
+              categoryStats[category].total++;
+              if (ua.isCorrect) categoryStats[category].correct++;
+            });
+          }
         });
 
         return Object.entries(categoryStats)
@@ -224,13 +226,15 @@ const SpecialistDashboard: React.FC<{ user: User, onGoHome: () => void, onStartW
     const crossExamWeakness = useMemo(() => {
         const categoryStats: { [key: string]: { correct: number; total: number, exams: Set<string> } } = {};
         user.history.forEach(result => {
-          result.userAnswers.forEach(ua => {
-            const category = ua.category || 'Uncategorized';
-            if (!categoryStats[category]) categoryStats[category] = { correct: 0, total: 0, exams: new Set() };
-            categoryStats[category].total++;
-            if (ua.isCorrect) categoryStats[category].correct++;
-            categoryStats[category].exams.add(result.examName);
-          });
+          if (Array.isArray(result.userAnswers)) {
+            result.userAnswers.forEach(ua => {
+              const category = ua.category || 'Uncategorized';
+              if (!categoryStats[category]) categoryStats[category] = { correct: 0, total: 0, exams: new Set() };
+              categoryStats[category].total++;
+              if (ua.isCorrect) categoryStats[category].correct++;
+              categoryStats[category].exams.add(result.examName);
+            });
+          }
         });
 
         return Object.entries(categoryStats)
@@ -278,7 +282,7 @@ const SpecialistDashboard: React.FC<{ user: User, onGoHome: () => void, onStartW
                          <p className="text-center text-gray-500 py-4">Unlock an exam to see your mastery overview.</p>
                     )}
                      <div className="text-right text-sm text-gray-500 mt-4">
-                        Slots Used: {user.unlockedExams.length} / 2 | <a href="#" onClick={(e) => { e.preventDefault(); onGoHome(); }} className="text-blue-600 hover:underline">Unlock More</a>
+                        Slots Used: {user.unlockedExams.length} / {user.paidUnlockSlots} | <button onClick={onGoHome} className="text-blue-600 hover:underline">Unlock More</button>
                     </div>
                 </div>
 
